@@ -9,7 +9,7 @@ python-multipart>=0.0.6
 beautifulsoup4==4.12.2
 lxml==6.1.0
 PyMuPDF
-mcp==1.29.0
+mcp==2.3.0
 PyJWT==2.13.0
 passlib[bcrypt]==1.7.4
 bcrypt==3.2.0
