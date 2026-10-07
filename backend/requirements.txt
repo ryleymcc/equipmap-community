@@ -6,7 +6,7 @@ psycopg2-binary==2.9.9
 pydantic>=2.5.2
 pydantic-settings>=2.1.0
 python-multipart>=0.0.6
-beautifulsoup4==4.12.2
+beautifulsoup4==4.15.0
 lxml==6.1.0
 PyMuPDF
 mcp==1.29.0
