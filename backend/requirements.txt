@@ -15,7 +15,7 @@ passlib[bcrypt]==1.7.4
 bcrypt==3.2.0
 pytest>=7.4.3
 pytest-asyncio>=0.21.1
-httpx>=0.25.1
+httpx>=0.28.1
 requests==2.33.0
 sentry-sdk>=2.0.0
 slowapi>=0.1.9
