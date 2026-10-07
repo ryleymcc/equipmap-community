@@ -18,5 +18,5 @@ pytest-asyncio>=0.21.1
 httpx>=0.25.1
 requests==2.33.0
 sentry-sdk>=2.0.0
-slowapi>=0.1.9
+slowapi>=0.1.10
 pywebpush>=2.0.0
