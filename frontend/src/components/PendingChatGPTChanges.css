@@ -1,0 +1,17 @@
+.pending-chatgpt-trigger { display: flex; justify-content: flex-end; margin-bottom: var(--space-5); }
+.pending-chatgpt-trigger .btn { min-height: var(--control-height-md); }
+.modal-card.pending-chatgpt-modal:not([open]) { display: none; }
+.modal-card.pending-chatgpt-modal { position: fixed; inset: 0; margin: auto; max-height: calc(100dvh - var(--space-7) * 2); }
+.pending-chatgpt-modal::backdrop { background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); }
+.pending-chatgpt-modal .modal-card-body { padding: 0; overflow: hidden; gap: 0; }
+.pending-chatgpt-frame { width: 100%; height: var(--pending-review-height, 65dvh); max-height: calc(100dvh - var(--space-7) * 4 - var(--control-height-lg)); border: 0; display: block; background: var(--surface-color); }
+.pending-chatgpt-message, .pending-chatgpt-list-error { padding: var(--space-5); }
+.pending-chatgpt-error { display: flex; align-items: flex-start; gap: var(--space-3); margin: var(--space-5); padding: var(--space-4); background: var(--danger-subtle); border: 1px solid var(--danger-border); border-radius: var(--radius-md); }
+.pending-chatgpt-error svg { flex-shrink: 0; color: var(--danger-color); }
+.pending-chatgpt-modal :is(button, [tabindex]):focus-visible, .pending-chatgpt-trigger button:focus-visible { outline: 2px solid var(--primary-color); outline-offset: var(--space-1); }
+body:has(.pending-chatgpt-modal[open]) { overflow: hidden; }
+@media (max-width: 700px) {
+  .pending-chatgpt-trigger .btn, .pending-chatgpt-modal button { min-height: var(--control-height-lg); }
+  .pending-chatgpt-modal { max-height: calc(100dvh - var(--space-5) * 2); }
+  .pending-chatgpt-frame { max-height: calc(100dvh - var(--space-5) * 4 - var(--control-height-lg)); }
+}

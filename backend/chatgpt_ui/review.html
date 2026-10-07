@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Review EquipMap changes</title><style>/* EQUIPMAP_CSS */</style></head>
+<body class="review-body">
+<main class="location-panel review-panel" aria-labelledby="review-title">
+  <header><h1 id="review-title">Review changes</h1><p class="location-context">1. Select changes. 2. Check or edit the new values. 3. Approve.</p></header>
+  <p id="review-message" role="status" tabindex="-1">Loading pending changes…</p>
+  <form id="review-form" aria-busy="false" novalidate>
+    <div class="review-toolbar"><label class="review-check"><input id="review-all" type="checkbox" disabled> Select all changes</label><div class="review-actions"><button id="review-refresh" type="button" disabled>Refresh</button><button id="review-cancel" type="button" disabled>Cancel selected</button><button id="review-approve" class="review-primary" type="submit" disabled>Approve selected (0)</button></div></div>
+    <div id="review-results" class="location-results"></div>
+  </form>
+</main><script>/* EQUIPMAP_JS */</script>
+</body></html>

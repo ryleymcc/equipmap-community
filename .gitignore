@@ -1,0 +1,41 @@
+# Environment variables and secrets (Strict SOC 2 enforcement)
+.env
+.env.*
+*.env
+!.env.example
+
+# File uploads & storage
+uploads/
+
+# Private data directory (VAPID keys, etc.) — must never be committed
+backend/data/
+
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / Frontend artifacts
+node_modules/
+/dist
+/dev-dist
+dist-ssr/
+*.local
+
+# Database dumps / archives
+*.sql
+*.tar.gz
+*.db
+*.sqlite*
+auth_state*.json
+frontend/dist/
+frontend/dev-dist/
+*.pem
+*.key
+backups/

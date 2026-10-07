@@ -1,0 +1,424 @@
+/* CalibrationControlPanel.css - EquipMap Visual Alignment & Calibration */
+
+.calibration-panel {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text-primary, #f8fafc);
+  font-family: var(--font-family-ui, 'Outfit', sans-serif);
+  box-sizing: border-box;
+  animation: calibrationSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- Desktop & Widescreen Layout --- */
+@media (min-width: 641px) {
+  .calibration-panel {
+    bottom: var(--space-5, 16px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(920px, calc(100vw - 32px));
+    border-radius: var(--radius-xl, 16px);
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.1));
+    box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
+  @keyframes calibrationSlideIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 16px);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+  }
+
+  .calibration-panel-body {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: nowrap;
+    gap: var(--space-3, 10px);
+    padding: var(--space-3, 8px) var(--space-5, 16px) var(--space-4, 12px);
+  }
+
+  .calibration-field--base {
+    flex: 1 1 180px;
+    min-width: 150px;
+  }
+
+  .calibration-field--opacity {
+    flex: 0 0 135px;
+    width: 135px;
+  }
+
+  .calibration-inputs-group {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-3, 10px);
+    flex: 0 0 auto;
+  }
+
+  .calibration-field--number {
+    flex: 0 0 75px;
+    width: 75px;
+  }
+
+  .calibration-field--reset {
+    flex: 0 0 auto;
+  }
+
+  .calibration-panel-hint-desktop {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-muted, #64748b);
+    padding: 0 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-sm, 6px);
+    border: 1px dashed var(--surface-border-subtle, rgba(255, 255, 255, 0.08));
+    height: 38px;
+    box-sizing: border-box;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  .calibration-panel-hint-mobile {
+    display: none;
+  }
+
+  .calibration-toggle-btn {
+    display: none;
+  }
+}
+
+/* --- Mobile Bottom Sheet Layout --- */
+@media (max-width: 640px) {
+  .calibration-panel {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    border-radius: var(--radius-xl, 16px) var(--radius-xl, 16px) 0 0;
+    border-top: 1px solid var(--surface-border, rgba(255, 255, 255, 0.12));
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.7);
+    padding-bottom: max(var(--space-3, 8px), env(safe-area-inset-bottom, 8px));
+  }
+
+  @keyframes calibrationSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .calibration-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 8px);
+    padding: var(--space-3, 8px) var(--space-4, 12px) var(--space-3, 8px);
+  }
+
+  .calibration-inputs-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: var(--space-3, 8px);
+    align-items: flex-end;
+  }
+
+  .calibration-panel-hint-desktop {
+    display: none;
+  }
+
+  .calibration-panel-hint-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted, #64748b);
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-sm, 6px);
+    text-align: center;
+  }
+
+  .calibration-panel .btn {
+    min-height: 40px;
+  }
+
+  .calibration-panel select.input-field,
+  .calibration-panel .input-field {
+    min-height: 40px;
+  }
+
+  .calibration-label--spacer {
+    display: none;
+  }
+
+  .calibration-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-card, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.1));
+    color: var(--text-secondary, #94a3b8);
+    cursor: pointer;
+  }
+}
+
+/* --- Header Section --- */
+.calibration-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 8px);
+  padding: var(--space-3, 8px) var(--space-4, 12px);
+  border-bottom: 1px solid var(--surface-border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+@media (min-width: 641px) {
+  .calibration-panel-header {
+    padding: var(--space-3, 8px) var(--space-5, 16px);
+  }
+}
+
+.calibration-panel-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 8px);
+  min-width: 0;
+}
+
+.calibration-panel-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--primary-subtle, rgba(59, 130, 246, 0.14));
+  border: 1px solid var(--primary-border, rgba(59, 130, 246, 0.35));
+  color: var(--primary-color, #3b82f6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.calibration-panel-title-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.calibration-panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary, #f8fafc);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calibration-panel-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calibration-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 6px);
+  flex-shrink: 0;
+}
+
+.calibration-panel-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* --- Control Fields --- */
+.calibration-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+  min-width: 0;
+}
+
+.calibration-label {
+  font-size: var(--font-size-label, 12px);
+  font-weight: 600;
+  color: var(--text-secondary, #94a3b8);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  line-height: 1.2;
+  min-height: 16px;
+}
+
+.calibration-label--spacer {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.calibration-value-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary, #f8fafc);
+  background: var(--surface-card, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-xs, 4px);
+  padding: 0 4px;
+  font-family: var(--font-family-mono, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.calibration-panel select.input-field {
+  width: 100%;
+  height: 38px;
+  min-height: 38px;
+  font-size: 13px;
+  background-color: #1e293b;
+  color: var(--text-primary, #f8fafc);
+  border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md, 8px);
+  padding: 0 2rem 0 0.75rem;
+  cursor: pointer;
+}
+
+.calibration-panel input.input-field {
+  width: 100%;
+  height: 38px;
+  min-height: 38px;
+  font-size: 13px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-primary, #f8fafc);
+  border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md, 8px);
+  padding: 0 0.5rem;
+  text-align: center;
+  font-family: var(--font-family-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+
+.calibration-panel input.input-field:focus,
+.calibration-panel select.input-field:focus {
+  outline: none;
+  border-color: var(--primary-color, #3b82f6);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+/* Range input styling */
+.calibration-range-container {
+  display: flex;
+  align-items: center;
+  height: 38px;
+}
+
+.calibration-range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+  margin: 0;
+  transition: background 0.15s ease;
+}
+
+.calibration-range-input:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.calibration-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary-color, #3b82f6);
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.12s ease, background-color 0.12s ease;
+}
+
+.calibration-range-input::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  background: var(--primary-hover, #2563eb);
+}
+
+.calibration-range-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary-color, #3b82f6);
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+/* Reset button styling */
+.calibration-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 38px;
+  min-width: 38px;
+  padding: 0 10px;
+  background: var(--surface-card, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md, 8px);
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.calibration-reset-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #f8fafc);
+  border-color: var(--surface-border-hover, rgba(255, 255, 255, 0.22));
+}
+
+@media (max-width: 640px) {
+  .calibration-reset-btn {
+    height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calibration-panel {
+    animation: none;
+    transition: none;
+  }
+}

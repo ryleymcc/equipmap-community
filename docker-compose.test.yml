@@ -1,0 +1,18 @@
+services:
+  test-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: floorplan_test_db
+  backend-test:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://myuser:mypassword@test-db:5432/floorplan_test_db
+      SECRET_KEY: test-secret-key
+    depends_on:
+      - test-db
+    volumes:
+      - ./backend:/app
+      - ./uploads:/app/uploads
+    command: pytest tests

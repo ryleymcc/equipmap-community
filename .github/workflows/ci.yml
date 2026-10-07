@@ -1,0 +1,28 @@
+name: Community checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: node --test backend/tests/*viewer.test.cjs
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -p equipmap-tests -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from backend-test
+      - if: always()
+        run: docker compose -p equipmap-tests -f docker-compose.test.yml down

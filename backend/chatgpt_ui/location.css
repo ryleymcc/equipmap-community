@@ -1,0 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap');
+/* Isolated iframe: mirror the existing EquipMap tokens and panel/button primitives. */
+:root {
+  --bg-color: #0b1329;
+  --surface-color: rgba(30, 41, 59, 1.0);
+  --surface-border: rgba(255, 255, 255, 0.1);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --primary-color: #3b82f6;
+  --space-2: 6px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 18px;
+  --font-family-ui: 'Outfit', sans-serif;
+  --font-size-body: 14px;
+  --font-size-card-title: 15px;
+  --control-height-lg: 44px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--text-primary); background: var(--bg-color); font-family: var(--font-family-ui); font-size: var(--font-size-body); }
+.location-panel { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5); background: var(--surface-color); border: 1px solid var(--surface-border); border-radius: var(--radius-lg); }
+.location-panel h1, .location-title { margin: 0; font-size: var(--font-size-card-title); overflow-wrap: anywhere; }
+.location-results { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+.location-entry { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.location-message { overflow-wrap: anywhere; }
+.location-panel p { margin: 0; }
+.location-context { color: var(--text-secondary); overflow-wrap: anywhere; }
+.location-image { width: 100%; height: auto; border-radius: var(--radius-md); }
+.location-image:not([hidden]) { display: block; }
+.location-link { align-items: center; justify-content: center; min-height: var(--control-height-lg); padding: var(--space-2) var(--space-4); color: var(--text-primary); background: var(--primary-color); border-radius: var(--radius-md); text-decoration: none; }
+.location-link:not([hidden]) { display: inline-flex; }
+.location-link:focus-visible { outline: 2px solid var(--text-primary); outline-offset: var(--space-2); }

@@ -1,0 +1,164 @@
+.chatgpt-connect-page {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-7);
+  font-size: var(--font-size-body);
+}
+
+.chatgpt-connect-panel {
+  width: min(100%, 540px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-7);
+  border-radius: var(--radius-xl);
+}
+
+.chatgpt-connect-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.chatgpt-connect-header h1 {
+  font-size: var(--font-size-page-title);
+  font-weight: var(--font-weight-bold);
+}
+
+.chatgpt-connect-panel p {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.chatgpt-connect-account,
+.chatgpt-connect-row p {
+  color: var(--text-secondary);
+}
+
+.chatgpt-connect-permissions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.chatgpt-connect-panel h2 {
+  font-size: var(--font-size-card-title);
+  font-weight: var(--font-weight-semibold);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.chatgpt-connect-actions,
+.chatgpt-connect-links {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.chatgpt-connect-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: var(--danger-subtle);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.chatgpt-connect-error svg {
+  flex-shrink: 0;
+  color: var(--danger-color);
+}
+
+.chatgpt-connect-notice {
+  color: var(--text-primary);
+}
+
+.chatgpt-connect-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.chatgpt-connect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--surface-border);
+  padding-bottom: var(--space-4);
+}
+
+.chatgpt-connect-row > div {
+  min-width: 0;
+}
+
+.chatgpt-connect-links a {
+  color: var(--text-primary);
+  min-height: var(--control-height-md);
+  display: inline-flex;
+  align-items: center;
+  text-decoration: underline;
+}
+
+.chatgpt-connect-panel :is(button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: var(--space-1);
+}
+
+@media (max-width: 700px) {
+  .chatgpt-connect-page {
+    padding: var(--space-5);
+  }
+
+  .chatgpt-connect-panel {
+    padding: var(--space-5);
+  }
+
+  .chatgpt-connect-actions {
+    flex-direction: column;
+  }
+
+  .chatgpt-connect-panel :is(button, a) {
+    min-height: var(--control-height-lg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatgpt-connect-panel .btn {
+    transition: none;
+    transform: none;
+  }
+}
+
+.chatgpt-change-values {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.chatgpt-change-values h3 {
+  color: var(--text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-2);
+}
+
+.chatgpt-change-values p {
+  white-space: pre-wrap;
+}
+
+@media (max-width: 700px) {
+  .chatgpt-change-values {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

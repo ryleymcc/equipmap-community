@@ -1,0 +1,12 @@
+.env*
+node_modules
+dist
+dev-dist
+__pycache__
+.pytest_cache
+uploads
+data
+*.db
+*.sqlite*
+auth_state*.json
+.git
