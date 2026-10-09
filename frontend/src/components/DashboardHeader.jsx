@@ -1,6 +1,6 @@
 import {
   Menu, Search, X, MapPin, MapPinOff, Circle, Plus,
-  Building, Upload, DoorOpen, Package, AlertCircle
+  Building, Upload, DoorOpen, Package, AlertCircle, ListChecks, BookOpen
 } from 'lucide-react';
 
 export default function DashboardHeader({
@@ -17,8 +17,6 @@ export default function DashboardHeader({
   setRoomFilter,
   ticketFilter,
   setTicketFilter,
-
-
   handleSearchResultClick,
   isEditor,
   isPlusDropdownOpen,
@@ -27,17 +25,22 @@ export default function DashboardHeader({
   setIsSiteModalOpen,
   setIsUploadModalOpen,
   activeSite,
-  openAddSelectionModal
+  openAddSelectionModal,
+  openCreateWorkOrder,
+  openCreateFromTask,
+  openCreateTask,
+  user,
+  canCreateWorkOrders
 }) {
-  const currentFilterValue =
-    activeView === 'floorplans' ? searchQuery :
-    activeView === 'equipment' ? equipFilter :
-    activeView === 'rooms' ? roomFilter :
-    activeView === 'tickets' ? ticketFilter :
-    '';
+  const isGlobalSearchView = activeView === 'floorplans' || activeView === 'workorders';
+
+  const currentFilterValue = isGlobalSearchView ? searchQuery :
+                            activeView === 'equipment' ? equipFilter :
+                            activeView === 'rooms' ? roomFilter :
+                            activeView === 'tickets' ? ticketFilter : '';
 
   const handleClearInput = () => {
-    if (activeView === 'floorplans') {
+    if (isGlobalSearchView) {
       setSearchQuery('');
       setSearchResults([]);
     } else if (activeView === 'equipment') {
@@ -64,7 +67,7 @@ export default function DashboardHeader({
         <div className="search-input-wrapper">
           <div className="search-fade-left" />
           <Search className="search-icon" size={20} />
-          {activeView === 'floorplans' && (
+          {isGlobalSearchView && (
             <input
               type="text"
               className="search-input"
@@ -97,12 +100,11 @@ export default function DashboardHeader({
             <input
               type="text"
               className="search-input"
-              placeholder="Filter issues by title, desc, site, floorplan, user..."
+              placeholder="Filter tickets by title, desc, site, floorplan, user..."
               value={ticketFilter || ''}
               onChange={e => setTicketFilter(e.target.value)}
             />
           )}
-
 
           {currentFilterValue && currentFilterValue.length > 0 && (
             <div className="search-clear-wrapper">
@@ -114,7 +116,7 @@ export default function DashboardHeader({
             </div>
           )}
 
-          {activeView === 'floorplans' && isSearchFocused && searchResults.length > 0 && (
+          {isGlobalSearchView && isSearchFocused && searchResults.length > 0 && (
             <div className="search-results glass-panel search-dropdown">
               {searchResults.map(result => {
                 const isUnlocated = (result.type === 'room' || result.type === 'equipment') && (result.x_coordinate == null || result.y_coordinate == null);
@@ -165,12 +167,12 @@ export default function DashboardHeader({
 
       {/* Right Actions Dropdown */}
       <div className="dashboard-actions">
-        {isEditor && (
+        {(isEditor || (user && canCreateWorkOrders !== false)) && (
           <div className="dropdown-container">
             <button
               className="trigger-btn"
               onClick={() => setIsPlusDropdownOpen(!isPlusDropdownOpen)}
-              title="Add Site or Floorplan"
+              title="Add or Create"
             >
               <Plus size={20} />
             </button>
@@ -181,7 +183,7 @@ export default function DashboardHeader({
                   onClick={() => setIsPlusDropdownOpen(false)}
                 />
                 <div className="dropdown-menu">
-                  {activeView === 'floorplans' && (
+                  {activeView === 'floorplans' && isEditor && (
                     <>
                       <button
                         className="dropdown-item"
@@ -202,7 +204,7 @@ export default function DashboardHeader({
                     </>
                   )}
 
-                  {activeView === 'rooms' && (
+                  {activeView === 'rooms' && isEditor && (
                     <button
                       className="dropdown-item"
                       onClick={() => { setIsPlusDropdownOpen(false); openAddSelectionModal('room'); }}
@@ -212,7 +214,7 @@ export default function DashboardHeader({
                     </button>
                   )}
 
-                  {activeView === 'equipment' && (
+                  {activeView === 'equipment' && isEditor && (
                     <button
                       className="dropdown-item"
                       onClick={() => { setIsPlusDropdownOpen(false); openAddSelectionModal('equipment'); }}
@@ -220,6 +222,32 @@ export default function DashboardHeader({
                       <Package size={16} />
                       <span>Add Equipment</span>
                     </button>
+                  )}
+
+                  {activeView === 'workorders' && (user && canCreateWorkOrders !== false) && (
+                    <>
+                      <button
+                        className="dropdown-item"
+                        onClick={() => { setIsPlusDropdownOpen(false); openCreateWorkOrder && openCreateWorkOrder(); }}
+                      >
+                        <Plus size={16} />
+                        <span>Create Work Order</span>
+                      </button>
+                      <button
+                        className="dropdown-item"
+                        onClick={() => { setIsPlusDropdownOpen(false); openCreateFromTask && openCreateFromTask(); }}
+                      >
+                        <ListChecks size={16} />
+                        <span>Create from Task</span>
+                      </button>
+                      <button
+                        className="dropdown-item"
+                        onClick={() => { setIsPlusDropdownOpen(false); openCreateTask && openCreateTask(); }}
+                      >
+                        <BookOpen size={16} />
+                        <span>Create Task Template</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </>

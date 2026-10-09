@@ -1,6 +1,7 @@
 import os
 import hashlib
 import logging
+import asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -174,7 +175,7 @@ class ETagMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 class SecurityHeadersMiddleware:
-    """Middleware to enforce HSTS and SOC 2 / OWASP recommended security headers on all responses."""
+    """Middleware to enforce HSTS and browser security headers on all responses."""
     def __init__(self, app) -> None:
         self.app = app
 
@@ -233,6 +234,8 @@ class CachedStaticFiles(StaticFiles):
 # Mount Uploads with browser cache headers for instant re-loads
 app.mount("/uploads", CachedStaticFiles(directory=UPLOAD_DIR), name="uploads")
 
+from routers import work_orders, pm_schedules, notifications, tasks, trades
+
 # Include APIRouters
 app.include_router(users.router)
 app.include_router(sites.router)
@@ -244,9 +247,38 @@ app.include_router(tickets.router)
 app.include_router(audit_logs.router)
 app.include_router(search.router)
 app.include_router(sync.router)
+app.include_router(work_orders.router)
+app.include_router(pm_schedules.router)
+app.include_router(notifications.router)
+app.include_router(tasks.router)
+app.include_router(trades.router)
+
+pm_runner_task: asyncio.Task = None
+
+async def pm_schedule_periodic_runner():
+    """Periodic background worker to check and generate due PM work orders every 60 seconds."""
+    from database import async_session_maker
+    from routers.pm_schedules import process_due_schedules
+
+    # Wait a brief moment on startup before initial run
+    await asyncio.sleep(5)
+    while True:
+        try:
+            async with async_session_maker() as db:
+                generated = await process_due_schedules(db)
+                for order_number in generated:
+                    logger.info(f"PM Runner generated work order '{order_number}'")
+        except asyncio.CancelledError:
+            logger.info("PM schedule runner task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in PM schedule periodic loop: {e}")
+
+        await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def startup_event():
+    global pm_runner_task
     try:
         await init_db()
         logger.info("Database initialized successfully")
@@ -272,8 +304,21 @@ async def startup_event():
                         logger.warning("Default dev admin user created ('admin' / 'admin'). Change credentials before deploying to production.")
                 else:
                     logger.warning("No users found in database. In production, initial admin auto-creation with default credentials is disabled. Set INITIAL_ADMIN_PASSWORD to bootstrap an admin user.")
+        pm_runner_task = asyncio.create_task(pm_schedule_periodic_runner())
+        logger.info("PM schedule runner started")
     except Exception as e:
         logger.error(f"Error during database initialization: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global pm_runner_task
+    if pm_runner_task and not pm_runner_task.done():
+        pm_runner_task.cancel()
+        try:
+            await pm_runner_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("PM Schedule runner stopped")
 
 @app.get("/health")
 async def health():

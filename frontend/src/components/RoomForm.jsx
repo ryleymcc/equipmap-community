@@ -1,11 +1,13 @@
 import { useRef } from 'react';
 import { MapPin, Trash2, Check } from 'lucide-react';
-
+import { useAuth } from '../AuthContext';
+import WorkOrderHistorySection from './WorkOrderHistorySection';
 
 export function RoomForm({
   editingRoom,
   newPinCoord,
   isEditor,
+  user: propUser,
   isMobile,
   formError,
   setFormError,
@@ -14,6 +16,8 @@ export function RoomForm({
   onRelocate,
   onDelete
 }) {
+  const { user: contextUser } = useAuth();
+  const user = propUser || contextUser;
   const roomNameRef = useRef(null);
   const roomDescRef = useRef(null);
 
@@ -146,7 +150,13 @@ export function RoomForm({
         {!isMobile && actionButtons}
       </form>
 
-
+      {isEditing && (
+        <WorkOrderHistorySection
+          item={editingRoom}
+          itemType="room"
+          currentUser={user}
+        />
+      )}
     </div>
   );
 }

@@ -31,7 +31,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 from config import get_secret_key
 SECRET_KEY = get_secret_key()
 ALGORITHM = "HS256"
-# Access token: default 30 minutes for SOC 2 compliance
+# Access token: default 30 minutes
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 # Refresh token: default 7 days with continuous rotation
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
@@ -123,7 +123,7 @@ async def rotate_refresh_token(
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    # REPLAY ATTACK DETECTION (SOC 2 CC6.1 / CC6.2)
+    # REPLAY ATTACK DETECTION
     # If this refresh token was already revoked, someone may have intercepted/replayed it.
     # Invalidate all active sessions for this user immediately!
     if db_token.revoked_at is not None:
@@ -257,7 +257,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
             raise credentials_exception
         token_data = schemas.TokenData(username=username, token_version=token_version, jti=jti)
     except InvalidTokenError as exc:
-        logger.warning("Access token rejected: %s", type(exc).__name__)
         raise credentials_exception
 
     # Check if individual access token JTI was revoked (e.g. via explicit logout)
@@ -304,6 +303,11 @@ async def require_user(current_user: Optional[models.User] = Depends(get_current
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return current_user
+
+async def require_work_order_user(current_user: models.User = Depends(require_user)) -> models.User:
+    if current_user.role == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot modify work orders")
     return current_user
 
 async def require_manage_items(current_user: models.User = Depends(require_user)) -> models.User:

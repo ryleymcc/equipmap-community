@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, memo, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useState, memo } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { Document as PdfDocument, Page as PdfPage, pdfjs } from 'react-pdf';
 import '@google/model-viewer';
@@ -6,11 +6,37 @@ import { API_URL } from '../api';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { floorplanLogger } from '../floorplanLogger';
 
-const pdfWorkerUrl = new URL(
+function getWorkOrderMapPosition(workOrder, allRooms, allEquipment) {
+  const linkedRoomIds = new Set((workOrder.rooms || []).map(room => room.id));
+  const linkedEquipmentIds = new Set((workOrder.equipment || []).map(equipment => equipment.id));
+  const linkedRoom = allRooms.find(room => (
+    linkedRoomIds.has(room.id) &&
+    room.x_coordinate != null &&
+    room.y_coordinate != null
+  ));
+  const linkedEquipment = allEquipment.find(equipment => (
+    linkedEquipmentIds.has(equipment.id) &&
+    equipment.x_coordinate != null &&
+    equipment.y_coordinate != null
+  ));
+
+  // A single linked room/equipment is the work order's map location. Resolve
+  // against current map data so the badge follows relocation without requiring
+  // a work-order edit or a stale coordinate update.
+  if (workOrder.location_type === 'room' && linkedRoom) {
+    return { x: linkedRoom.x_coordinate, y: linkedRoom.y_coordinate };
+  }
+  if (workOrder.location_type === 'equipment' && linkedEquipment) {
+    return { x: linkedEquipment.x_coordinate, y: linkedEquipment.y_coordinate };
+  }
+
+  return { x: workOrder.x_coordinate, y: workOrder.y_coordinate };
+}
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
-pdfjs.GlobalWorkerOptions.workerSrc = `${pdfWorkerUrl}?v=${encodeURIComponent(import.meta.env.VITE_APP_VERSION || 'dev')}`;
 
 export const MapCanvas = memo(function MapCanvas({
   transformComponentRef,
@@ -28,9 +54,12 @@ export const MapCanvas = memo(function MapCanvas({
   overlayDragRef,
   setPdfLoaded,
   filteredRooms,
+  allRooms = [],
   pendingRooms,
   dispersedEquipment,
+  allEquipment = [],
   tickets = [],
+  workOrders = [],
   multiFloorRefPin,
   highlightedPin,
   equipColor,
@@ -39,6 +68,7 @@ export const MapCanvas = memo(function MapCanvas({
   onPinRoomClick,
   onPinEquipClick,
   onPinTicketClick,
+  onPinWorkOrderClick,
   onPinMultiFloorRefClick
 }) {
   const editMode = mapMode.type === 'add-placement' || mapMode.type === 'add-form';
@@ -50,47 +80,26 @@ export const MapCanvas = memo(function MapCanvas({
   const modelViewerRef = useRef(null);
   const [hoveredPin, setHoveredPin] = useState(null);
   const [loadError, setLoadError] = useState(false);
-  const [renderedFpIds, setRenderedFpIds] = useState(() => new Set());
-  const [prewarmedFpIds, setPrewarmedFpIds] = useState(() => new Set());
-  const renderedPathsRef = useRef(new Map());
 
   const mainFp = calibrationMode
     ? siteFloorplans.find(fp => fp.id === parseInt(baseFloorplanId, 10))
     : floorplan;
   const isGlb = mainFp?.file_type === 'glb';
 
-  const mainFpRef = useRef(mainFp);
-  useEffect(() => {
-    mainFpRef.current = mainFp;
-  }, [mainFp]);
-
-  const onMapLoadSuccess = useCallback((assetDetails = {}, targetFpId = null) => {
-    const activeId = targetFpId || mainFpRef.current?.id;
-    if (!activeId) return;
-
-    setRenderedFpIds(prev => {
-      if (prev.has(activeId)) return prev;
-      const next = new Set(prev);
-      next.add(activeId);
-      return next;
-    });
-
-    if (activeId === mainFpRef.current?.id) {
-      setLoadError(false);
-      floorplanLogger.recordAssetSuccess(activeId, {
-        fileType: mainFpRef.current?.file_type || 'image',
+  const onMapLoadSuccess = (assetDetails = {}) => {
+    setLoadError(false);
+    if (mainFp?.id) {
+      floorplanLogger.recordAssetSuccess(mainFp.id, {
+        fileType: mainFp.file_type || 'image',
         ...assetDetails
       });
-      if (setPdfLoaded) setPdfLoaded(true);
     }
-  }, [setPdfLoaded]);
+    if (setPdfLoaded) setPdfLoaded(true);
+  };
 
-  const onMapLoadError = useCallback((targetFpId = null) => {
-    const activeId = targetFpId || mainFpRef.current?.id;
-    if (activeId === mainFpRef.current?.id) {
-      setLoadError(true);
-    }
-  }, []);
+  const onMapLoadError = () => {
+    setLoadError(true);
+  };
 
   const setModelViewerRef = (node) => {
     if (modelViewerRef.current) {
@@ -110,91 +119,21 @@ export const MapCanvas = memo(function MapCanvas({
   // Reset loading/error when floorplan changes and start asset timing
   useEffect(() => {
     setLoadError(false);
-    if (!mainFp?.id || !mainFp?.file_path) return;
-
-    // Check if file_path changed (e.g. replaced floorplan)
-    const prevPath = renderedPathsRef.current.get(mainFp.id);
-    if (prevPath && prevPath !== mainFp.file_path) {
-      setRenderedFpIds(prev => {
-        const next = new Set(prev);
-        next.delete(mainFp.id);
-        return next;
-      });
-    }
-    renderedPathsRef.current.set(mainFp.id, mainFp.file_path);
-
-    // If this floorplan's layer has already rendered, switch is instant
-    if (renderedFpIds.has(mainFp.id)) {
-      if (setPdfLoaded) setPdfLoaded(true);
-      floorplanLogger.recordAssetSuccess(mainFp.id, {
-        fileType: mainFp.file_type || 'image',
-        extraInfo: '(instant cached canvas)'
-      });
-    } else {
-      if (setPdfLoaded) setPdfLoaded(false);
+    if (setPdfLoaded) setPdfLoaded(false);
+    if (mainFp?.id && mainFp?.file_path) {
       floorplanLogger.recordAssetStart(mainFp.id, {
         fileType: mainFp.file_type || 'image',
         filePath: mainFp.file_path
       });
     }
-  }, [floorplan?.id, mainFp?.id, mainFp?.file_path, mainFp?.file_type, calibrationMode, setPdfLoaded, renderedFpIds]);
+  }, [floorplan?.id, mainFp?.id, mainFp?.file_path, mainFp?.file_type, calibrationMode, setPdfLoaded]);
 
-  // Background pre-warming of site floorplans in idle time
-  useEffect(() => {
-    if (!siteFloorplans || siteFloorplans.length === 0 || !mainFp?.id) return;
-    if (!renderedFpIds.has(mainFp.id)) return; // Pre-warm only after current floor is ready
-
-    const unrendered = siteFloorplans.filter(fp => fp && fp.id && fp.file_type !== 'glb' && !renderedFpIds.has(fp.id) && !prewarmedFpIds.has(fp.id) && fp.id !== mainFp.id);
-    if (unrendered.length === 0) return;
-
-    const nextFp = unrendered[0];
-    let cancelled = false;
-
-    const prewarm = () => {
-      if (cancelled) return;
-      setPrewarmedFpIds(prev => {
-        if (prev.has(nextFp.id)) return prev;
-        const next = new Set(prev);
-        next.add(nextFp.id);
-        return next;
-      });
-    };
-
-    let timerId;
-    if ('requestIdleCallback' in window) {
-      const idleId = window.requestIdleCallback(prewarm, { timeout: 1200 });
-      return () => {
-        cancelled = true;
-        window.cancelIdleCallback(idleId);
-      };
-    } else {
-      timerId = setTimeout(prewarm, 400);
-      return () => {
-        cancelled = true;
-        clearTimeout(timerId);
-      };
-    }
-  }, [siteFloorplans, mainFp?.id, renderedFpIds, prewarmedFpIds]);
-
-  const activeFloorplansToRender = useMemo(() => {
-    const map = new Map();
-    if (mainFp?.id) {
-      map.set(mainFp.id, mainFp);
-    }
-    if (Array.isArray(siteFloorplans)) {
-      for (const fp of siteFloorplans) {
-        if (fp && fp.id && (renderedFpIds.has(fp.id) || prewarmedFpIds.has(fp.id))) {
-          map.set(fp.id, fp);
-        }
-      }
-    }
-    return Array.from(map.values());
-  }, [mainFp, siteFloorplans, renderedFpIds, prewarmedFpIds]);
 
   // Constants for pin rendering (matching CSS)
   const ROOM_RADIUS = 8;
   const EQUIP_RADIUS = 12;
   const TICKET_RADIUS = 10;
+  const WORK_ORDER_RADIUS = 13;
   const REF_PIN_RADIUS = 11;
   const HOVER_SCALE = 1.25;
 
@@ -445,6 +384,94 @@ export const MapCanvas = memo(function MapCanvas({
         }
       });
 
+      // Draw Work Orders (only open work orders)
+      const openWorkOrders = workOrders.filter(wo => wo.status !== 'completed' && wo.status !== 'cancelled' && wo.status !== 'rejected');
+      openWorkOrders.forEach(wo => {
+        const workOrderPosition = getWorkOrderMapPosition(wo, allRooms, allEquipment);
+        if (workOrderPosition.x == null || workOrderPosition.y == null) return;
+        const sx = workOrderPosition.x * scale + panX;
+        const sy = workOrderPosition.y * scale + panY;
+
+        const isHighlighted = highlightedPin?.type === 'workOrder' && highlightedPin?.id === wo.id;
+        const isHovered = hoveredPin?.type === 'workOrder' && hoveredPin?.id === wo.id;
+
+        const baseRadius = WORK_ORDER_RADIUS;
+        const drawRadius = isHovered ? baseRadius * HOVER_SCALE : baseRadius;
+
+        if (sx < -drawRadius * 4 || sx > width + drawRadius * 4 || sy < -drawRadius * 4 || sy > height + drawRadius * 4) return;
+
+        let priorityColor = '#3b82f6';
+        if (wo.priority === 'urgent') priorityColor = '#ef4444';
+        else if (wo.priority === 'high') priorityColor = '#f97316';
+        else if (wo.priority === 'low') priorityColor = '#10b981';
+
+        let statusColor = '#0284c7';
+        if (wo.status === 'pending_triage') statusColor = '#f59e0b';
+        else if (wo.status === 'in_progress') statusColor = '#6366f1';
+        else if (wo.status === 'on_hold') statusColor = '#64748b';
+
+        // Pulse effect for highlighted pins or urgent open work orders
+        if (isHighlighted || (wo.priority === 'urgent' && wo.status !== 'completed')) {
+          const pulse = (time % 1500) / 1500;
+          const pulseRadius = drawRadius + (pulse < 0.7 ? (pulse / 0.7) * (WORK_ORDER_RADIUS * 1.2) : 0);
+          const opacity = pulse < 0.7 ? 0.7 * (1 - pulse / 0.7) : 0;
+
+          ctx.beginPath();
+          ctx.arc(sx, sy, pulseRadius, 0, Math.PI * 2);
+          ctx.fillStyle = wo.priority === 'urgent' ? `rgba(239, 68, 68, ${opacity})` : `rgba(59, 130, 246, ${opacity})`;
+          ctx.fill();
+        }
+
+        // Draw badge pin (circle with priority outer ring & status fill)
+        ctx.beginPath();
+        ctx.arc(sx, sy, drawRadius, 0, Math.PI * 2);
+        ctx.fillStyle = statusColor;
+        ctx.fill();
+        ctx.strokeStyle = priorityColor;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Inner white symbol: W / !
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (wo.status === 'pending_triage') {
+          ctx.font = `bold ${Math.round(drawRadius * 1.1)}px sans-serif`;
+          ctx.fillText('!', sx, sy);
+        } else {
+          ctx.font = `bold ${Math.round(drawRadius * 0.9)}px sans-serif`;
+          ctx.fillText('W', sx, sy);
+        }
+
+        // Draw Name / WO Number tag if enabled
+        if (showPointNames) {
+          ctx.font = '600 12px Outfit, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          const padding = 8;
+
+          const text = `${wo.order_number || 'WO'}: ${wo.title}`;
+          const metrics = ctx.measureText(text);
+          const textWidth = metrics.width;
+          const textHeight = 16;
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(sx + drawRadius + padding - 4, sy - textHeight / 2, textWidth + 8, textHeight, 4);
+          } else {
+            ctx.rect(sx + drawRadius + padding - 4, sy - textHeight / 2, textWidth + 8, textHeight);
+          }
+          ctx.fill();
+          ctx.strokeStyle = priorityColor;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.fillStyle = '#0f172a';
+          ctx.fillText(text, sx + drawRadius + padding, sy);
+        }
+      });
+
       // Draw Multi-Floor Reference Pin
       if (multiFloorRefPin && multiFloorRefPin.x_coordinate != null && multiFloorRefPin.y_coordinate != null) {
         const sx = multiFloorRefPin.x_coordinate * scale + panX;
@@ -567,7 +594,7 @@ export const MapCanvas = memo(function MapCanvas({
 
     frameId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frameId);
-  }, [filteredRooms, pendingRooms, dispersedEquipment, tickets, multiFloorRefPin, highlightedPin, hoveredPin, editMode, newPinCoord, activeActionType, equipColor, calibrationMode, transformComponentRef, showPointNames, loadError]);
+  }, [filteredRooms, pendingRooms, dispersedEquipment, allRooms, allEquipment, tickets, workOrders, multiFloorRefPin, highlightedPin, hoveredPin, editMode, newPinCoord, activeActionType, equipColor, calibrationMode, transformComponentRef, showPointNames, loadError]);
 
   // ── Hit Testing ────────────────────────────────────────────────────────────
   const checkPinHit = (clientX, clientY) => {
@@ -620,6 +647,52 @@ export const MapCanvas = memo(function MapCanvas({
       if (distSq <= (radius + 4) ** 2) return { type: 'room', data: room };
     }
 
+    // Work-order badges frequently share a room or equipment pin's coordinates.
+    // Resolve the badge target against the complete floorplan data set so a search
+    // filter cannot change the interaction from an asset drawer to a WO modal.
+    const getLinkedItemAtWorkOrderPin = (wo) => {
+      const workOrderPosition = getWorkOrderMapPosition(wo, allRooms, allEquipment);
+      const sharesCoordinates = (item) => (
+        item.x_coordinate != null && item.y_coordinate != null &&
+        Math.abs(item.x_coordinate - workOrderPosition.x) < 0.001 &&
+        Math.abs(item.y_coordinate - workOrderPosition.y) < 0.001
+      );
+
+      // Match normal hit-test priority: equipment before rooms.
+      const linkedEquipmentIds = new Set((wo.equipment || []).map(item => item.id));
+      const linkedItems = [
+        ...allEquipment
+          .filter(item => linkedEquipmentIds.has(item.id))
+          .map(data => ({ type: 'equipment', data })),
+      ];
+
+      const linkedRoomIds = new Set((wo.rooms || []).map(item => item.id));
+      linkedItems.push(
+        ...allRooms
+          .filter(item => linkedRoomIds.has(item.id))
+          .map(data => ({ type: 'room', data }))
+      );
+
+      // Prefer an exact coordinate match. If this work order has only one linked
+      // item, use it even if older coordinates no longer line up exactly.
+      return linkedItems.find(({ data }) => sharesCoordinates(data)) ||
+        (linkedItems.length === 1 ? linkedItems[0] : null);
+    };
+
+    // Only standalone open work-order pins should open the work-order detail modal.
+    const openWorkOrders = workOrders.filter(wo => wo.status !== 'completed' && wo.status !== 'cancelled' && wo.status !== 'rejected');
+    for (const wo of openWorkOrders) {
+      const workOrderPosition = getWorkOrderMapPosition(wo, allRooms, allEquipment);
+      if (workOrderPosition.x == null || workOrderPosition.y == null) continue;
+      const sx = workOrderPosition.x * scale + positionX;
+      const sy = workOrderPosition.y * scale + positionY;
+      const radius = hoveredPin?.type === 'workOrder' && hoveredPin?.id === wo.id ? WORK_ORDER_RADIUS * HOVER_SCALE : WORK_ORDER_RADIUS;
+      const distSq = (mouseX - sx) ** 2 + (mouseY - sy) ** 2;
+      if (distSq <= (radius + 4) ** 2) {
+        return getLinkedItemAtWorkOrderPin(wo) || { type: 'workOrder', data: wo };
+      }
+    }
+
     return null;
   };
 
@@ -653,6 +726,9 @@ export const MapCanvas = memo(function MapCanvas({
       } else if (hit.type === 'room') onPinRoomClick(hit.data);
       else if (hit.type === 'equipment') onPinEquipClick(hit.data);
       else if (hit.type === 'ticket') onPinTicketClick(hit.data);
+      else if (hit.type === 'workOrder') {
+        if (onPinWorkOrderClick) onPinWorkOrderClick(hit.data);
+      }
       return;
     }
 
@@ -695,8 +771,6 @@ export const MapCanvas = memo(function MapCanvas({
             minScale={0.5}
             maxScale={100}
             centerOnInit={true}
-            // Let floorplan edges move into the viewport center without snapping back.
-            limitToBounds={false}
             panning={{ velocityDisabled: true }}
             wheel={{ step: 0.01, smoothStep: 0.002 }}
           >
@@ -743,55 +817,38 @@ export const MapCanvas = memo(function MapCanvas({
 
                   return (
                     <>
-                      {activeFloorplansToRender.map(fp => {
-                        const isCurrent = fp.id === mainFp.id;
-                        return (
-                          <div
-                            key={`${fp.id}_${fp.file_path}`}
-                            id={`floorplan-layer-${fp.id}`}
-                            style={{
-                              display: isCurrent ? 'block' : 'none',
-                              width: '100%',
-                              height: 'auto'
-                            }}
-                          >
-                            {fp.file_type === 'pdf' ? (
-                              <PdfDocument
-                                file={`${API_URL}${fp.file_path}`}
-                                onLoadSuccess={(pdf) => {
-                                  floorplanLogger.recordPdfDocParsed(fp.id, { numPages: pdf?.numPages || 1 });
-                                }}
-                                onLoadError={() => onMapLoadError(fp.id)}
-                                loading={null}
-                              >
-                                <PdfPage
-                                  pageNumber={1}
-                                  width={2000}
-                                  devicePixelRatio={5}
-                                  renderTextLayer={false}
-                                  renderAnnotationLayer={false}
-                                  onRenderSuccess={() => onMapLoadSuccess({ extraInfo: '(devicePixelRatio: 5, width: 2000px)' }, fp.id)}
-                                  onRenderError={() => onMapLoadError(fp.id)}
-                                />
-                              </PdfDocument>
-                            ) : (
-                              <img
-                                ref={(el) => {
-                                  if (el?.complete && el.naturalWidth > 0) {
-                                    onMapLoadSuccess({ extraInfo: '(memory cache decode)' }, fp.id);
-                                  }
-                                }}
-                                src={`${API_URL}${fp.file_path}`}
-                                className="svg-layer w-full h-auto object-contain"
-                                alt={fp.name || 'Floorplan'}
-                                draggable="false"
-                                onLoad={() => onMapLoadSuccess({ extraInfo: '(network/disk image decode)' }, fp.id)}
-                                onError={() => onMapLoadError(fp.id)}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
+                      {mainFp.file_type === 'pdf' ? (
+                        <PdfDocument
+                          file={`${API_URL}${mainFp.file_path}`}
+                          onLoadSuccess={(pdf) => {
+                            floorplanLogger.recordPdfDocParsed(mainFp?.id, { numPages: pdf?.numPages || 1 });
+                          }}
+                          onLoadError={onMapLoadError}
+                          loading={null}
+                        >
+                          <PdfPage
+                            pageNumber={1}
+                            width={2000}
+                            devicePixelRatio={5}
+                            renderTextLayer={false}
+                            renderAnnotationLayer={false}
+                            onRenderSuccess={() => onMapLoadSuccess({ extraInfo: '(devicePixelRatio: 5, width: 2000px)' })}
+                            onRenderError={onMapLoadError}
+                          />
+                        </PdfDocument>
+                      ) : (
+                        <img
+                          ref={(el) => {
+                            if (el?.complete && el.naturalWidth > 0) onMapLoadSuccess({ extraInfo: '(memory cache decode)' });
+                          }}
+                          src={`${API_URL}${mainFp.file_path}`}
+                          className="svg-layer w-full h-auto object-contain"
+                          alt="Floorplan"
+                          draggable="false"
+                          onLoad={() => onMapLoadSuccess({ extraInfo: '(network/disk image decode)' })}
+                          onError={onMapLoadError}
+                        />
+                      )}
                     </>
                   );
                 })()}
@@ -849,33 +906,12 @@ export const MapCanvas = memo(function MapCanvas({
                           devicePixelRatio={5}
                           renderTextLayer={false}
                           renderAnnotationLayer={false}
-                          onRenderSuccess={() => onMapLoadSuccess({ extraInfo: 'Calibration overlay PDF' })}
-                          onRenderError={onMapLoadError}
                         />
                       </PdfDocument>
                     ) : floorplan.file_type === 'glb' ? (
-                      <model-viewer
-                        ref={(node) => {
-                          if (node) {
-                            node.addEventListener('load', () => onMapLoadSuccess({ extraInfo: 'GLB 3D overlay' }), { once: true });
-                            if (node.loaded) onMapLoadSuccess({ extraInfo: 'GLB 3D overlay (cached)' });
-                          }
-                        }}
-                        src={`${API_URL}${floorplan.file_path}`}
-                        style={{ width: '100%', height: '1000px' }}
-                      />
+                      <model-viewer src={`${API_URL}${floorplan.file_path}`} style={{ width: '100%', height: '1000px' }} />
                     ) : (
-                      <img
-                        ref={(el) => {
-                          if (el?.complete && el.naturalWidth > 0) onMapLoadSuccess({ extraInfo: '(overlay memory cache decode)' });
-                        }}
-                        src={`${API_URL}${floorplan.file_path}`}
-                        alt="Overlay"
-                        draggable="false"
-                        style={{ width: '100%', height: 'auto' }}
-                        onLoad={() => onMapLoadSuccess({ extraInfo: '(overlay network/disk decode)' })}
-                        onError={onMapLoadError}
-                      />
+                      <img src={`${API_URL}${floorplan.file_path}`} alt="Overlay" draggable="false" style={{ width: '100%', height: 'auto' }} />
                     )}
                   </div>
                 )}

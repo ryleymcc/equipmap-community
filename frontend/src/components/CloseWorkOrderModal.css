@@ -1,0 +1,129 @@
+/* CloseWorkOrderModal.css - EquipMap Modal for Work Order Completion */
+
+.close-wo-modal {
+  width: min(500px, 94vw);
+  max-width: 500px;
+}
+
+.close-wo-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.close-wo-title-text {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.close-wo-labor-group {
+  width: 100%;
+}
+
+.close-wo-stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 6px);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.close-wo-stepper-btn {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-md, 8px);
+}
+
+.close-wo-stepper-input {
+  flex: 1 1 0%;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding: 0.45rem 0.5rem;
+  min-height: 38px;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--surface-border);
+  color: #60a5fa;
+  outline: none;
+  font-family: 'JetBrains Mono', monospace;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.close-wo-stepper-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.close-wo-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: 6px;
+  width: 100%;
+}
+
+.close-wo-preset-btn {
+  min-height: 28px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.close-wo-date-input,
+.close-wo-notes-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.close-wo-bulk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  max-height: 80px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.close-wo-bulk-pill {
+  font-size: 0.75rem;
+  padding: 2px 7px;
+}
+
+.close-wo-bulk-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+}
+
+@media (max-width: 480px) {
+  .close-wo-stepper {
+    gap: 4px;
+  }
+
+  .close-wo-stepper-btn {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+  }
+
+  .close-wo-stepper-input {
+    font-size: 1.05rem;
+    padding: 0.35rem 0.4rem;
+  }
+}

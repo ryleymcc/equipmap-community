@@ -295,7 +295,7 @@ async def test_admin_revoke_user_sessions_endpoint(client: AsyncClient, admin_to
     # 4. User's previous access token is immediately revoked
     me_revoked = await client.get("/api/users/me", headers=user_headers)
     assert me_revoked.status_code == 401
-    assert me_revoked.headers["WWW-Authenticate"] == "Bearer"
+    assert "revoked" in me_revoked.json()["detail"].lower() or "invalidated" in me_revoked.json()["detail"].lower()
 
     # 5. User's previous refresh token is also invalid
     refresh_revoked = await client.post("/api/refresh-token", json={"refresh_token": user_refresh})

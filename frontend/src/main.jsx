@@ -6,7 +6,6 @@ import App from './App.jsx'
 import './index.css'
 import { registerSW } from 'virtual:pwa-register'
 import { trackButtonClick, trackPageLoadTime } from './metrics';
-import { deferPwaUpdate } from './pwaUpdate';
 
 // Auto-recover when a new release replaces hashed JS chunks or dynamic imports fail
 window.addEventListener('vite:preloadError', (event) => {
@@ -22,45 +21,58 @@ window.addEventListener('vite:preloadError', (event) => {
 
 const intervalMS = 60 * 60 * 1000 // Check every hour
 
-if ('serviceWorker' in navigator && !import.meta.env.DEV) {
-  let hadController = Boolean(navigator.serviceWorker.controller);
-  const handleServiceWorkerUpdate = () => {
-    // The first worker install does not replace a running app version.
-    if (!hadController) {
-      hadController = true;
-      return;
-    }
-
-    deferPwaUpdate();
-  };
-
-  navigator.serviceWorker.addEventListener('controllerchange', handleServiceWorkerUpdate);
-
-  const updateSW = registerSW({
-    immediate: true,
-    // Override vite-plugin-pwa's autoUpdate reload so the running screen is
-    // not interrupted. App.jsx applies the update after the next route change.
-    onNeedReload: handleServiceWorkerUpdate,
-    onRegistered(registration) {
-      if (registration) {
-        setInterval(() => {
-          console.log('Checking for SW update...')
-          registration.update()
-        }, intervalMS)
-      }
-    },
-    onNeedRefresh() {
-      deferPwaUpdate()
-      updateSW(true)
-    }
-  });
-
-  // Check for updates whenever the window is focused (app resumed on mobile).
-  window.addEventListener('focus', () => {
-    navigator.serviceWorker?.getRegistration().then(registration => {
-      registration?.update()
+if ('serviceWorker' in navigator) {
+  if (import.meta.env.DEV) {
+    // In development mode, register the standalone push worker (/sw-push.js)
+    // so background push notifications work reliably even when the PWA is closed,
+    // without caching or interfering with Vite's HMR source modules.
+    navigator.serviceWorker.register('/sw-push.js', { scope: '/' }).catch(err => {
+      console.warn('Service worker registration failed in DEV:', err);
     });
-  });
+  } else {
+    let refreshing = false;
+    const handleServiceWorkerUpdate = () => {
+      if (refreshing) return;
+      // Do not interrupt active floorplan mapping sessions
+      if (window.location.pathname.startsWith('/map/')) {
+        console.log('New Service Worker activated; preserving active map session until navigation.');
+        return;
+      }
+      refreshing = true;
+      window.location.reload();
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', handleServiceWorkerUpdate);
+
+    const updateSW = registerSW({
+      immediate: true,
+      // Override vite-plugin-pwa's autoUpdate default reload so map sessions
+      // use the same guarded activation behavior as controllerchange.
+      onNeedReload: handleServiceWorkerUpdate,
+      onRegistered(registration) {
+        if (registration) {
+          setInterval(() => {
+            console.log('Checking for SW update...')
+            registration.update()
+          }, intervalMS)
+        }
+      },
+      onNeedRefresh() {
+        if (window.location.pathname.startsWith('/map/')) {
+          console.log('New version ready; preserving current map session.')
+          return
+        }
+        updateSW(true)
+      }
+    });
+
+    // Check for updates whenever the window is focused (app resumed on mobile).
+    window.addEventListener('focus', () => {
+      navigator.serviceWorker?.getRegistration().then(registration => {
+        registration?.update()
+      });
+    });
+  }
 }
 
 // Track initial app load time

@@ -34,8 +34,7 @@ async def update_room(room_id: int, room_data: schemas.RoomUpdate, db: AsyncSess
     if not db_room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    updated_room = await update_db_object(db, db_room, room_data, "room", user=current_user)
-    return updated_room
+    return await update_db_object(db, db_room, room_data, "room", user=current_user)
 
 @router.delete("/api/rooms/{room_id}")
 async def delete_room(room_id: int, db: AsyncSession = Depends(get_db), current_user: models.User = Depends(require_editor)):

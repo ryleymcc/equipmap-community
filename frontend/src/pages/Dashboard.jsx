@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { ShieldAlert } from 'lucide-react';
 import { useDashboard } from '../hooks/useDashboard';
 import DashboardLeftDrawer from '../components/DashboardLeftDrawer';
 import DashboardHeader from '../components/DashboardHeader';
@@ -5,14 +7,32 @@ import FloorplanGrid from '../components/FloorplanGrid';
 import EquipmentTable from '../components/EquipmentTable';
 import RoomTable from '../components/RoomTable';
 import TicketTable from '../components/TicketTable';
-
+import WorkOrderTable from '../components/WorkOrderTable';
+import WorkOrderCreateModal from '../components/WorkOrderCreateModal';
+import TaskSelectModal from '../components/TaskSelectModal';
+import TaskCreateModal from '../components/TaskCreateModal';
 import DashboardModals from '../components/DashboardModals';
-
+import WorkOrderHistoryModal from '../components/WorkOrderHistoryModal';
+import PMSchedulerModal from '../components/PMSchedulerModal';
 
 export default function Dashboard() {
   const dashboard = useDashboard();
+  const [historyModalItem, setHistoryModalItem] = useState(null);
+  const [historyModalType, setHistoryModalType] = useState('equipment');
+  const [isTaskSelectOpen, setIsTaskSelectOpen] = useState(false);
+  const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
+  const [taskForWorkOrder, setTaskForWorkOrder] = useState(null);
+  const [isPMSchedulerOpen, setIsPMSchedulerOpen] = useState(false);
+  const [pmStudioSearch, setPmStudioSearch] = useState('');
+  const [pmStudioItem, setPmStudioItem] = useState(null);
+  const [pmStudioItemType, setPmStudioItemType] = useState('equipment');
 
-
+  const handleOpenPMSchedules = (item, type = 'equipment') => {
+    setPmStudioSearch(item?.name || '');
+    setPmStudioItem(item || null);
+    setPmStudioItemType(type || 'equipment');
+    setIsPMSchedulerOpen(true);
+  };
 
   return (
     <div className="app-layout">
@@ -44,8 +64,6 @@ export default function Dashboard() {
           setRoomFilter={dashboard.setRoomFilter}
           ticketFilter={dashboard.ticketFilter}
           setTicketFilter={dashboard.setTicketFilter}
-
-
           handleSearchResultClick={dashboard.handleSearchResultClick}
           isEditor={dashboard.isEditor}
           isPlusDropdownOpen={dashboard.isPlusDropdownOpen}
@@ -55,6 +73,14 @@ export default function Dashboard() {
           setIsUploadModalOpen={dashboard.setIsUploadModalOpen}
           activeSite={dashboard.activeSite}
           openAddSelectionModal={dashboard.openAddSelectionModal}
+          openCreateWorkOrder={() => {
+            setTaskForWorkOrder(null);
+            dashboard.setIsCreateWorkOrderOpen(true);
+          }}
+          openCreateFromTask={() => setIsTaskSelectOpen(true)}
+          openCreateTask={() => setIsCreateTaskModalOpen(true)}
+          canCreateWorkOrders={dashboard.canCreateWorkOrders}
+          user={dashboard.user}
         />
 
         {dashboard.activeView === 'floorplans' && (
@@ -76,10 +102,6 @@ export default function Dashboard() {
             setActiveDropdownFpId={dashboard.setActiveDropdownFpId}
             setFloorplanToRename={dashboard.setFloorplanToRename}
             setIsRenameModalOpen={dashboard.setIsRenameModalOpen}
-            setFloorplanToReplaceFile={dashboard.setFloorplanToReplaceFile}
-            setIsReplaceFileModalOpen={dashboard.setIsReplaceFileModalOpen}
-            setFloorplanToRescale={dashboard.setFloorplanToRescale}
-            setIsRescaleModalOpen={dashboard.setIsRescaleModalOpen}
             handleDeleteFloorplan={dashboard.handleDeleteFloorplan}
             setIsUploadModalOpen={dashboard.setIsUploadModalOpen}
             isEditor={dashboard.isEditor}
@@ -113,7 +135,11 @@ export default function Dashboard() {
             toggleEquipSelection={dashboard.toggleEquipSelection}
             selectAllFilteredEquip={dashboard.selectAllFilteredEquip}
             setIsBulkEditModalOpen={dashboard.setIsBulkEditModalOpen}
-
+            onViewWorkOrders={(item, type) => {
+              setHistoryModalItem(item);
+              setHistoryModalType(type || 'equipment');
+            }}
+            onOpenPMSchedules={(item, type) => handleOpenPMSchedules(item, type || 'equipment')}
           />
         )}
 
@@ -138,7 +164,11 @@ export default function Dashboard() {
             roomSortField={dashboard.roomSortField}
             roomSortOrder={dashboard.roomSortOrder}
             toggleRoomSort={dashboard.toggleRoomSort}
-
+            onViewWorkOrders={(item, type) => {
+              setHistoryModalItem(item);
+              setHistoryModalType(type || 'room');
+            }}
+            onOpenPMSchedules={(item, type) => handleOpenPMSchedules(item, type || 'room')}
           />
         )}
 
@@ -153,12 +183,69 @@ export default function Dashboard() {
             ticketSortOrder={dashboard.ticketSortOrder}
             toggleTicketSort={dashboard.toggleTicketSort}
             user={dashboard.user}
-            isLoading={dashboard.isLoadingTickets}
-            isBackgroundSyncing={dashboard.isBackgroundSyncingTickets}
           />
         )}
 
-
+        {dashboard.activeView === 'workorders' && (
+          (dashboard.user || dashboard.isAuthLoading) ? (
+            <WorkOrderTable
+              allWorkOrders={dashboard.allWorkOrders}
+              filteredWorkOrders={dashboard.filteredWorkOrders}
+              isLoading={dashboard.isLoadingWorkOrders || dashboard.isAuthLoading}
+              error={dashboard.workOrderError}
+              workOrderSummary={dashboard.workOrderSummary}
+              loadWorkOrders={dashboard.loadWorkOrders}
+              currentUser={dashboard.user}
+              searchQuery={dashboard.workOrderFilter}
+              setSearchQuery={dashboard.setWorkOrderFilter}
+              statusFilter={dashboard.workOrderStatusFilter}
+              setStatusFilter={dashboard.setWorkOrderStatusFilter}
+              priorityFilter={dashboard.workOrderPriorityFilter}
+              setPriorityFilter={dashboard.setWorkOrderPriorityFilter}
+              categoryFilter={dashboard.workOrderCategoryFilter}
+              setCategoryFilter={dashboard.setWorkOrderCategoryFilter}
+              sourceFilter={dashboard.workOrderSourceFilter}
+              setSourceFilter={dashboard.setWorkOrderSourceFilter}
+              tradeFilter={dashboard.workOrderTradeFilter}
+              setTradeFilter={dashboard.setWorkOrderTradeFilter}
+              techFilter={dashboard.workOrderTechFilter}
+              setTechFilter={dashboard.setWorkOrderTechFilter}
+              dateFilter={dashboard.workOrderDateFilter}
+              setDateFilter={dashboard.setWorkOrderDateFilter}
+              lastUpdatedTime={dashboard.workOrderLastUpdated}
+              sortField={dashboard.workOrderSortField}
+              sortOrder={dashboard.workOrderSortOrder}
+              toggleSort={dashboard.toggleWorkOrderSort}
+              resetFilters={dashboard.resetWorkOrderFilters}
+              goToMap={dashboard.goToMap}
+            />
+          ) : (
+            <div className="list-view-container">
+              <div className="glass-panel p-2xl text-center" style={{ maxWidth: '440px', margin: '4rem auto', borderRadius: '12px' }}>
+                <ShieldAlert size={44} color="#f59e0b" style={{ margin: '0 auto 1rem auto' }} />
+                <h2 className="text-lg font-bold mb-xs text-foreground">Sign In Required</h2>
+                <p className="text-muted text-xs mb-lg" style={{ lineHeight: 1.5 }}>
+                  You must be signed in with an authorized technician or staff account to view maintenance work orders.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => dashboard.navigate('/login', {
+                    state: {
+                      from: {
+                        pathname: dashboard.location.pathname,
+                        search: dashboard.location.search,
+                        hash: dashboard.location.hash
+                      }
+                    }
+                  })}
+                  className="btn btn-primary btn-md inline-flex items-center gap-xs"
+                >
+                  Sign In to Continue
+                </button>
+              </div>
+            </div>
+          )
+        )}
       </div>
 
       <DashboardModals
@@ -167,18 +254,6 @@ export default function Dashboard() {
         floorplanToRename={dashboard.floorplanToRename}
         setFloorplanToRename={dashboard.setFloorplanToRename}
         handleRenameFloorplan={dashboard.handleRenameFloorplan}
-        isReplaceFileModalOpen={dashboard.isReplaceFileModalOpen}
-        setIsReplaceFileModalOpen={dashboard.setIsReplaceFileModalOpen}
-        floorplanToReplaceFile={dashboard.floorplanToReplaceFile}
-        setFloorplanToReplaceFile={dashboard.setFloorplanToReplaceFile}
-        handleReplaceFloorplanFile={dashboard.handleReplaceFloorplanFile}
-        isReplacingFile={dashboard.isReplacingFile}
-        isRescaleModalOpen={dashboard.isRescaleModalOpen}
-        setIsRescaleModalOpen={dashboard.setIsRescaleModalOpen}
-        floorplanToRescale={dashboard.floorplanToRescale}
-        setFloorplanToRescale={dashboard.setFloorplanToRescale}
-        handleRescaleFloorplan={dashboard.handleRescaleFloorplan}
-        isRescaling={dashboard.isRescaling}
         isSiteModalOpen={dashboard.isSiteModalOpen}
         setIsSiteModalOpen={dashboard.setIsSiteModalOpen}
         handleCreateSite={dashboard.handleCreateSite}
@@ -208,7 +283,75 @@ export default function Dashboard() {
         selectedCount={dashboard.selectedEquipIds.length}
       />
 
+      <WorkOrderHistoryModal
+        isOpen={!!historyModalItem}
+        onClose={() => setHistoryModalItem(null)}
+        item={historyModalItem}
+        itemType={historyModalType}
+        goToMap={dashboard.goToMap}
+        onWorkOrderClosed={() => {
+          if (dashboard.loadWorkOrders) dashboard.loadWorkOrders(true);
+        }}
+      />
 
+      {isTaskSelectOpen && (
+        <TaskSelectModal
+          isOpen={isTaskSelectOpen}
+          onClose={() => setIsTaskSelectOpen(false)}
+          onSelectTask={(task) => {
+            setTaskForWorkOrder(task);
+            dashboard.setIsCreateWorkOrderOpen(true);
+          }}
+          title="Create Work Order from Task"
+          subtitle="Select a standard task sheet to populate work order instructions, checklists, and estimates."
+          actionButtonLabel="Create Work Order"
+        />
+      )}
+
+      {dashboard.isCreateWorkOrderOpen && (
+        <WorkOrderCreateModal
+          isOpen={dashboard.isCreateWorkOrderOpen}
+          onClose={() => {
+            dashboard.setIsCreateWorkOrderOpen(false);
+            setTaskForWorkOrder(null);
+          }}
+          initialTask={taskForWorkOrder}
+          currentUser={dashboard.user}
+          onCreated={() => {
+            if (dashboard.loadWorkOrders) dashboard.loadWorkOrders(true);
+            setTaskForWorkOrder(null);
+          }}
+        />
+      )}
+
+      {isCreateTaskModalOpen && (
+        <TaskCreateModal
+          isOpen={isCreateTaskModalOpen}
+          onClose={() => setIsCreateTaskModalOpen(false)}
+          onTaskCreated={(newTask) => {
+            setTaskForWorkOrder(newTask);
+            dashboard.setIsCreateWorkOrderOpen(true);
+          }}
+        />
+      )}
+
+      {isPMSchedulerOpen && (
+        <PMSchedulerModal
+          isOpen={isPMSchedulerOpen}
+          onClose={() => {
+            setIsPMSchedulerOpen(false);
+            setPmStudioSearch('');
+            setPmStudioItem(null);
+          }}
+          currentUser={dashboard.user}
+          initialSearch={pmStudioSearch}
+          initialItem={pmStudioItem}
+          initialItemType={pmStudioItemType}
+          onWorkOrderGenerated={() => {
+            if (dashboard.loadWorkOrders) dashboard.loadWorkOrders(true);
+          }}
+        />
+      )}
     </div>
   );
 }

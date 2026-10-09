@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import  { useState } from 'react';
 import { Trash2, CheckCircle, AlertCircle, MapPin } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { getErrorMessage } from '../api';
@@ -14,17 +14,19 @@ export function TicketForm({
   onDelete
 }) {
   const { user } = useAuth();
-  const [prevTicketId, setPrevTicketId] = useState(editingTicket?.id);
   const [title, setTitle] = useState(editingTicket ? editingTicket.title : '');
   const [description, setDescription] = useState(editingTicket ? editingTicket.description : '');
   const [status, setStatus] = useState(editingTicket ? editingTicket.status : 'open');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (editingTicket && editingTicket.id !== prevTicketId) {
-    setPrevTicketId(editingTicket.id);
-    setTitle(editingTicket.title);
-    setDescription(editingTicket.description);
-    setStatus(editingTicket.status);
+  const [previousTicket, setPreviousTicket] = useState(editingTicket);
+  if (previousTicket !== editingTicket) {
+    setPreviousTicket(editingTicket);
+    if (editingTicket) {
+      setTitle(editingTicket.title);
+      setDescription(editingTicket.description);
+      setStatus(editingTicket.status);
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -155,7 +157,7 @@ export function TicketForm({
             className="btn btn-danger btn-sm gap-xs"
             onClick={() => onDelete(editingTicket.id)}
             disabled={isSubmitting}
-            title="Delete Issue"
+            title="Delete Ticket"
           >
             <Trash2 size={14} />
             <span>Delete</span>
@@ -178,7 +180,7 @@ export function TicketForm({
               className="btn btn-primary btn-sm gap-xs"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Saving...' : (editingTicket ? 'Save Changes' : 'Report Issue')}
+              {isSubmitting ? 'Saving...' : (editingTicket ? 'Update Ticket' : 'Create Ticket')}
             </button>
           )}
         </div>

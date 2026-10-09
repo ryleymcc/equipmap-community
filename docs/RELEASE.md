@@ -1,4 +1,17 @@
-# Initial community release
+# Community CMMS release
+
+The cmms branch adds the native work-order system from the no-tma application
+snapshot without copying its private Git history. The mapping-only main branch
+remains available.
+
+Included native capabilities: work orders, requests and triage, assignments,
+labor and comments, completion and printing, calendar and map pins, asset
+history, task templates, categories, task types, trades, PM recurrence, and
+optional browser push. See [CMMS.md](CMMS.md) and [HOSTING.md](HOSTING.md).
+
+Viewer write permissions are rejected even when old permission flags remain
+set. Order-number allocation is serialized inside PostgreSQL transactions.
+Work-order reads wait for the live response before falling back offline.
 
 This source snapshot intentionally starts a new Git history. The original
 repository history was not copied because it contains private operational files.

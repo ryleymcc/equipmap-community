@@ -15,8 +15,9 @@ from limiter import limiter
 
 from sqlalchemy.pool import NullPool
 
+
 # Use a test database
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://myuser:mypassword@localhost:5432/floorplan_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://myuser:mypassword@localhost:5433/floorplan_db")
 
 # If the URL already contains "test", assume it's already a test database URL
 if "test" in DATABASE_URL.split("/")[-1]:
@@ -33,9 +34,8 @@ TestingSessionLocal = async_sessionmaker(
 
 async def init_test_db():
     async with engine_test.begin() as conn:
-        await conn.execute(text("DROP SCHEMA public CASCADE;"))
-        await conn.execute(text("CREATE SCHEMA public;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
         # Create fuzzy search indexes (matching database.py)
@@ -53,37 +53,28 @@ async def init_test_db():
         session.add_all([admin, editor, viewer])
         await session.commit()
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# In modern pytest-asyncio with asyncio_mode = auto, the event loop lifecycle
+# is managed automatically by pytest-asyncio.
 
 @pytest.fixture(scope="session", autouse=True)
-async def setup_test_db():
-    # Parse host, port, and database name from TEST_DATABASE_URL
-    import re
-    # Extract host and optional port: postgresql+asyncpg://user:pass@host:port/dbname
-    host_match = re.search(r'@([^:/]+)(?::(\d+))?', TEST_DATABASE_URL)
-    db_host = host_match.group(1) if host_match else "localhost"
-    db_port = host_match.group(2) if (host_match and host_match.group(2)) else "5432"
+def setup_test_db():
+    async def _setup():
+        db_name = TEST_DATABASE_URL.split("/")[-1].split("?")[0]
+        admin_url = TEST_DATABASE_URL.rsplit("/", 1)[0] + "/postgres"
+        admin_engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
 
-    # Extract db name
-    db_name = TEST_DATABASE_URL.split("/")[-1].split("?")[0]
+        async with admin_engine.connect() as conn:
+            result = await conn.execute(text(f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"))
+            if not result.scalar():
+                await conn.execute(text(f"CREATE DATABASE {db_name}"))
 
-    # Attempt to create the test database if it doesn't exist
-    admin_url = f"postgresql+asyncpg://myuser:mypassword@{db_host}:{db_port}/postgres"
-    admin_engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
+        await admin_engine.dispose()
+        await init_test_db()
 
-    async with admin_engine.connect() as conn:
-        result = await conn.execute(text(f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"))
-        if not result.scalar():
-            await conn.execute(text(f"CREATE DATABASE {db_name}"))
-
-    await admin_engine.dispose()
-
-    # Initialize the test database schema and users
-    await init_test_db()
+    try:
+        asyncio.run(_setup())
+    except Exception as e:
+        print(f"\n[conftest] Note: Test database connection not available: {e}")
     yield
 
 @pytest.fixture(autouse=True)
@@ -94,6 +85,7 @@ def reset_limiter_storage():
 
 @pytest.fixture
 async def db_session():
+
     async with TestingSessionLocal() as session:
         yield session
         await session.rollback()

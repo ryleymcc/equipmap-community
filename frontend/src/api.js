@@ -12,9 +12,13 @@ export const api = axios.create({
   baseURL: BASE_URL,
 });
 
-// Add request timing metadata
+// Add a request interceptor for auth headers & timing
 api.interceptors.request.use((config) => {
   config.metadata = { startTime: performance.now() };
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  if (token && !config.headers.Authorization && !config.headers.authorization) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
@@ -90,10 +94,6 @@ export const uploadFloorplan = (formData) => api.post('/api/floorplans', formDat
 });
 export const deleteFloorplan = (floorplanId) => api.delete(`/api/floorplans/${floorplanId}`);
 export const updateFloorplan = (floorplanId, data) => api.put(`/api/floorplans/${floorplanId}`, data);
-export const replaceFloorplanFile = (floorplanId, formData) => api.put(`/api/floorplans/${floorplanId}/file`, formData, {
-  headers: { 'Content-Type': 'multipart/form-data' }
-});
-export const rescaleFloorplan = (floorplanId, data) => api.post(`/api/floorplans/${floorplanId}/rescale`, data);
 export const updateFloorplansSortOrder = (siteId, data) => api.put(`/api/sites/${siteId}/floorplans/sort`, data);
 
 export const getRooms = (floorplanId, config) => api.get(`/api/floorplans/${floorplanId}/rooms`, config);
@@ -122,11 +122,17 @@ export const undoAction = (logId) => api.post(`/api/audit-logs/${logId}/undo`);
 export const getRefPoints = (fpId, config) => api.get(`/api/floorplans/${fpId}/reference-points`, config);
 export const setRefPoints = (fpId, points) => api.put(`/api/floorplans/${fpId}/reference-points`, { points });
 
+// Trades
+export const getTrades = (config) => api.get('/api/trades', config);
+export const getTradesSummary = (config) => api.get('/api/trades/summary', config);
+export const createTrade = (data) => api.post('/api/trades', data);
+export const updateTrade = (tradeName, data) => api.put(`/api/trades/${encodeURIComponent(tradeName)}`, data);
+export const deleteTrade = (tradeName, data) => api.delete(`/api/trades/${encodeURIComponent(tradeName)}`, { data });
+
 // Users
 export const getUsers = (config) => api.get('/api/users', config);
 export const createUser = (data) => api.post('/api/users', data);
 export const updateUser = (id, data) => api.put(`/api/users/${id}`, data);
-export const deleteUser = (id) => api.delete(`/api/users/${id}`);
 export const getAssignableUsers = (config) => api.get('/api/users/assignable', config);
 
 export function getErrorMessage(error, defaultMsg = 'An error occurred') {
@@ -153,7 +159,87 @@ export function getErrorMessage(error, defaultMsg = 'An error occurred') {
   return error.message || defaultMsg;
 }
 
-// Tickets
+// Native Work Orders
+export const getWorkOrders = (params = {}, config = {}) => {
+  const query = new URLSearchParams();
+  if (params.status && params.status !== 'all') query.set('status_filter', params.status);
+  if (params.priority && params.priority !== 'all') query.set('priority', params.priority);
+  if (params.category && params.category !== 'all') query.set('category', params.category);
+  if (params.trade && params.trade !== 'all') query.set('trade', params.trade);
+  if (params.assigned_user_id && params.assigned_user_id !== 'all') query.set('assigned_user_id', String(params.assigned_user_id));
+  if (params.site_id) query.set('site_id', String(params.site_id));
+  if (params.floorplan_id) query.set('floorplan_id', String(params.floorplan_id));
+  if (params.room_id) query.set('room_id', String(params.room_id));
+  if (params.equipment_id) query.set('equipment_id', String(params.equipment_id));
+  if (params.search) query.set('search', params.search);
+  if (params.force_refresh) query.set('_t', String(Date.now()));
+
+  const qs = query.toString();
+  return api.get(`/api/work-orders${qs ? `?${qs}` : ''}`, config);
+};
+
+export const getWorkOrder = (id, config) => api.get(`/api/work-orders/${id}`, config);
+export const createWorkOrder = (data) => api.post('/api/work-orders', data);
+export const createPublicWorkOrder = (data) => api.post('/api/work-orders/public', data);
+export const updateWorkOrder = (id, data) => api.put(`/api/work-orders/${id}`, data);
+export const addWorkOrderLabor = (id, data) => api.post(`/api/work-orders/${id}/labor`, data);
+export const updateWorkOrderLabor = (woId, laborId, data) => api.put(`/api/work-orders/${woId}/labor/${laborId}`, data);
+export const deleteWorkOrderLabor = (woId, laborId) => api.delete(`/api/work-orders/${woId}/labor/${laborId}`);
+export const addWorkOrderComment = (id, data) => api.post(`/api/work-orders/${id}/comments`, data);
+export const updateWorkOrderComment = (woId, commentId, data) => api.put(`/api/work-orders/${woId}/comments/${commentId}`, data);
+export const deleteWorkOrderComment = (woId, commentId) => api.delete(`/api/work-orders/${woId}/comments/${commentId}`);
+export const closeWorkOrder = (id, data = {}) => api.post(`/api/work-orders/${id}/close`, data);
+export const deleteWorkOrder = (id) => api.delete(`/api/work-orders/${id}`);
+export const bulkCloseWorkOrders = (data) => api.post('/api/work-orders/bulk/close', data);
+export const bulkAssignWorkOrders = (data) => api.post('/api/work-orders/bulk/assign', data);
+export const bulkDeleteWorkOrders = (data) => api.post('/api/work-orders/bulk/delete', data);
+
+export const getWorkOrderHistory = (entityType, entityId, entityName, config) => {
+  const query = new URLSearchParams();
+  if (entityType) query.set('entity_type', entityType);
+  if (entityId !== undefined && entityId !== null && entityId !== '') query.set('entity_id', String(entityId));
+  if (entityName) query.set('entity_name', entityName);
+  query.set('_t', String(Date.now()));
+  return api.get(`/api/work-orders/history?${query.toString()}`, config);
+};
+
+// Preventive Maintenance Schedules
+export const getPMSchedules = (config) => api.get('/api/pm-schedules', config);
+export const getPMSchedule = (id, config) => api.get(`/api/pm-schedules/${id}`, config);
+export const getPMCalendar = (start, end, config) => api.get('/api/pm-schedules/calendar', {
+  ...config,
+  params: { ...(config?.params || {}), start, end },
+});
+export const previewPMSchedule = (data) => api.post('/api/pm-schedules/preview', data);
+export const createPMSchedule = (data) => api.post('/api/pm-schedules', data);
+export const updatePMSchedule = (id, data) => api.put(`/api/pm-schedules/${id}`, data);
+export const deletePMSchedule = (id) => api.delete(`/api/pm-schedules/${id}`);
+export const triggerPMSchedule = (id) => api.post(`/api/pm-schedules/${id}/trigger`);
+export const checkDuePMSchedules = () => api.post('/api/pm-schedules/check-due');
+
+// Task Templates & Sheets
+export const getTasks = (params = {}, config = {}) => {
+  const query = new URLSearchParams();
+  if (params.search) query.set('search', params.search);
+  if (params.category && params.category !== 'all') query.set('category', params.category);
+  if (params.is_active !== undefined && params.is_active !== null) query.set('is_active', String(params.is_active));
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.offset) query.set('offset', String(params.offset));
+  const qs = query.toString();
+  return api.get(`/api/tasks${qs ? `?${qs}` : ''}`, config);
+};
+export const getTask = (id, config) => api.get(`/api/tasks/${id}`, config);
+export const createTask = (data) => api.post('/api/tasks', data);
+export const updateTask = (id, data) => api.put(`/api/tasks/${id}`, data);
+export const deleteTask = (id) => api.delete(`/api/tasks/${id}`);
+export const getTaskCategories = (params = {}, config = {}) => api.get('/api/tasks/categories', { ...config, params });
+export const createTaskCategory = (data) => api.post('/api/tasks/categories', data);
+export const updateTaskCategory = (name, data) => api.put(`/api/tasks/categories/${encodeURIComponent(name)}`, data);
+export const getTaskTypes = (config) => api.get('/api/task-types', config);
+export const createTaskType = (data) => api.post('/api/task-types', data);
+export const updateTaskType = (id, data) => api.put(`/api/task-types/${id}`, data);
+
+// Legacy Tickets (kept for compatibility)
 export const getAllTickets = (config) => api.get('/api/tickets', config);
 export const createTicket = (ticketData) => api.post('/api/tickets', ticketData);
 export const updateTicket = (id, ticketData) => api.put(`/api/tickets/${id}`, ticketData);

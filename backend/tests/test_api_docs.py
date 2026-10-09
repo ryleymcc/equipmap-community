@@ -43,10 +43,10 @@ async def test_openapi_schema_auth_badges():
         assert "[🔒 AUTH]" in users_me_get.get("summary", "")
         assert users_me_get.get("x-auth-status") == "authenticated"
 
-        # Verify /api/equipment POST is tagged authenticated
-        equip_post = paths.get("/api/equipment", {}).get("post", {})
-        assert "[🔒 AUTH]" in equip_post.get("summary", "")
-        assert equip_post.get("x-auth-status") == "authenticated"
+        # Verify /api/work-orders POST is tagged authenticated
+        wo_post = paths.get("/api/work-orders", {}).get("post", {})
+        assert "[🔒 AUTH]" in wo_post.get("summary", "")
+        assert wo_post.get("x-auth-status") == "authenticated"
 
 @pytest.mark.asyncio
 async def test_endpoints_summary_api():
@@ -63,9 +63,9 @@ async def test_endpoints_summary_api():
         assert "public_endpoints" in data
 
         stats = data["stats"]
-        assert stats["total_endpoints"] > 25
-        assert stats["authenticated_count"] > 15
-        assert stats["public_count"] >= 3
+        assert stats["total_endpoints"] > 50
+        assert stats["authenticated_count"] > 40
+        assert stats["public_count"] >= 10
         assert stats["total_endpoints"] == stats["authenticated_count"] + stats["public_count"]
 
         # Ensure all items in authenticated_endpoints have is_authenticated == True

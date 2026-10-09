@@ -1,7 +1,21 @@
-# EquipMap Community
+# EquipMap Community CMMS
 
 EquipMap is a self-hosted facilities application that links rooms, equipment,
 maintenance tickets, and audit history to interactive floorplans.
+
+The `cmms` branch adds the complete native work-order system: public maintenance
+requests, triage, assignment, labor and comments, completion, calendar and print
+views, task sheets, trades, and recurring preventive maintenance. All records
+are managed by EquipMap itself. TMA/WebTMA is not required or included.
+
+Use `main` for the smaller floorplan/asset release, or clone this edition with:
+
+```sh
+git clone --branch cmms https://github.com/ryleymcc/equipmap-community.git
+cd equipmap-community
+```
+
+See the [CMMS setup and workflow guide](docs/CMMS.md).
 
 The frontend uses React, Vite, and a PWA service worker. The API uses FastAPI,
 SQLAlchemy, and PostgreSQL. PDF processing and OCR use PyMuPDF and Tesseract.
@@ -12,6 +26,13 @@ Screenshots from [equipmap.api1.ca](https://equipmap.api1.ca), captured October 
 2026. They show the hosted application's floorplan and equipment search workflows.
 The hosted deployment may differ from this release; TMA is excluded from Community.
 The pictured facility records and floorplans are not included in this repository.
+
+### Native work orders
+
+The CMMS edition manages requests, assignments, labor, completion, and recurring
+maintenance directly. This local demonstration uses synthetic records.
+
+![Native EquipMap work-order dashboard](docs/screenshots/cmms-work-orders.jpg)
 
 ### Interactive floorplans
 

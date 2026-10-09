@@ -1,0 +1,76 @@
+.assets-ownership-section {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 14px var(--space-5) var(--space-5);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+
+.assets-ownership-section:has(.entity-dropdown-panel) {
+  z-index: 4;
+}
+
+.assets-ownership-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.assets-ownership-icon {
+  width: calc(var(--control-height-sm) - var(--space-1));
+  height: calc(var(--control-height-sm) - var(--space-1));
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--primary-color);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-md);
+  background: var(--primary-subtle);
+}
+
+.assets-ownership-heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-eyebrow);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.assets-ownership-heading p {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.assets-ownership-location-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+
+.assets-ownership-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.assets-ownership-field label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (max-width: 700px) {
+  .assets-ownership-location-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .assets-ownership-field .input-field {
+    min-height: var(--control-height-lg);
+  }
+}

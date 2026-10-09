@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { ChevronRight, ChevronUp, Plus, AlertCircle, Layers, Trash2, LogIn, Crosshair } from 'lucide-react';
+import { ChevronRight, ChevronUp, Plus, AlertCircle, Layers, Trash2, LogIn, Crosshair, Wrench } from 'lucide-react';
 import { RoomForm } from './RoomForm';
 import { EquipmentForm } from './EquipmentForm';
 import { TicketForm } from './TicketForm';
@@ -38,6 +38,7 @@ export const RightDrawer = memo(function RightDrawer({
   onAddRoom,
   onAddEquipment,
   onAddTicket,
+  onOpenCreateWorkOrder,
   onUpdateRoom,
   onUpdateEquipment,
   onUpdateTicket,
@@ -100,7 +101,7 @@ export const RightDrawer = memo(function RightDrawer({
     }
     if (editingRoom) return isEditor ? 'Edit Room' : 'Room Details';
     if (editingEquipment) return isEditor ? 'Edit Equipment' : 'Equipment Details';
-    if (editingTicket) return isEditor || (user && editingTicket.created_by_id === user.id) ? 'Edit Issue' : 'Issue Details';
+    if (editingTicket) return 'Issue Ticket';
     if (editingMultiFloorRef) return 'Multi-Floor Reference Pin';
     return 'Add Item';
   };
@@ -147,6 +148,17 @@ export const RightDrawer = memo(function RightDrawer({
           {user && (
             <>
               <button
+                className="btn btn-primary btn-full gap-xs"
+                style={{ background: '#2563eb', color: '#fff' }}
+                onClick={() => {
+                  onClose();
+                  if (onOpenCreateWorkOrder) onOpenCreateWorkOrder();
+                }}
+              >
+                <Wrench size={18} /> + Work Order
+              </button>
+
+              <button
                 className="btn btn-danger btn-full"
                 onClick={() => handleStartAddType('ticket')}
               >
@@ -176,7 +188,7 @@ export const RightDrawer = memo(function RightDrawer({
           {!user && (
             <div className="unauth-drawer-card flex-column gap-sm p-md rounded-lg">
               <p className="text-xs text-muted m-0">
-                Sign in to add rooms, equipment, or report issues.
+                Sign in to add rooms, equipment, or submit issue tickets.
               </p>
               <button
                 type="button"
@@ -273,7 +285,7 @@ export const RightDrawer = memo(function RightDrawer({
           <p className="text-sm text-muted">
             {activeActionType === 'multi-floor-ref'
               ? 'Click anywhere on the map to place the Multi-Floor Reference Pin. It will appear at the corresponding relative location across all calibrated floorplans.'
-              : `Click anywhere on the map to place ${activeActionType === 'room' ? 'a room.' : activeActionType === 'equipment' ? 'equipment.' : 'an issue.'}`}
+              : `Click anywhere on the map to place ${activeActionType === 'room' ? 'a room.' : activeActionType === 'equipment' ? 'equipment.' : 'an issue ticket.'}`}
           </p>
 
           {activeActionType === 'multi-floor-ref' && (
@@ -420,9 +432,6 @@ export const RightDrawer = memo(function RightDrawer({
             onClose();
           }}
           onDelete={onDeleteRoom}
-
-
-
         />
       )}
 
@@ -445,9 +454,6 @@ export const RightDrawer = memo(function RightDrawer({
             onClose();
           }}
           onDelete={onDeleteEquipment}
-
-
-
         />
       )}
 

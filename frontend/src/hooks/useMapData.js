@@ -14,7 +14,6 @@ export function useMapData(floorplanId, activeActionType, setPdfLoaded, preloade
   const [pendingRooms, setPendingRooms] = useState([]);
   const [dataLoaded, setDataLoaded] = useState(() => Boolean(preloadedFloorplan || getCachedFloorplanSync(floorplanId)?.floorplan));
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loadError, setLoadError] = useState(null);
 
   const activeActionTypeRef = useRef(activeActionType);
   const floorplanRef = useRef(null);
@@ -36,7 +35,6 @@ export function useMapData(floorplanId, activeActionType, setPdfLoaded, preloade
     } else {
       setIsRefreshing(true);
     }
-    setLoadError(null);
 
     try {
       // 1. Fetch the main floorplan first
@@ -90,10 +88,6 @@ export function useMapData(floorplanId, activeActionType, setPdfLoaded, preloade
       });
     } catch (error) {
       console.error("Failed to load map data:", error);
-      const msg = error.response?.status === 404
-        ? "Floorplan not found"
-        : (error.response?.data?.detail || error.message || "Failed to load floorplan data");
-      setLoadError(msg);
       setDataLoaded(true); // Ensure loader is hidden even on error
     } finally {
       setIsRefreshing(false);
@@ -101,63 +95,57 @@ export function useMapData(floorplanId, activeActionType, setPdfLoaded, preloade
   }, [floorplanId, setPdfLoaded]);
 
   useEffect(() => {
+    if (setPdfLoaded) setPdfLoaded(false);
+    // Do not let the previous floorplan's pins remain visible while this
+    // route resolves. Cache/preloaded data below will repopulate these state
+    // values immediately when it is available.
+    setFloorplan(null);
+    setRooms([]);
+    setEquipment([]);
+    setTickets([]);
+    setDataLoaded(false);
+    setLastPlacedRoomName(null);
+    setPendingRooms([]);
+
     let active = true;
-    setLoadError(null);
-    const fpIdNum = parseInt(floorplanId, 10);
-
-    // 1. Synchronously resolve from in-memory preloaded state, siteFloorplans, or localStorage
-    let preloaded = null;
-    if (preloadedFloorplan && preloadedFloorplan.id === fpIdNum) {
-      preloaded = preloadedFloorplan;
-    } else if (siteFloorplansRef.current.length > 0) {
-      const found = siteFloorplansRef.current.find(fp => fp.id === fpIdNum);
-      if (found) preloaded = found;
-    }
-
-    const syncHit = preloaded
-      ? { floorplan: preloaded, siteFloorplans: siteFloorplansRef.current }
-      : getCachedFloorplanSync(floorplanId);
-
-    let loadedFromCache = Boolean(syncHit?.floorplan);
-    let cachedEtag = null;
-
-    if (syncHit?.floorplan) {
-      // Synchronous instant hit: update state immediately without intermediate null/empty render cycle
-      floorplanRef.current = syncHit.floorplan;
-      setFloorplan(syncHit.floorplan);
-      setRooms(syncHit.floorplan.rooms || []);
-      setEquipment(syncHit.floorplan.equipment || []);
-      setTickets(syncHit.floorplan.tickets || []);
-      if (syncHit.siteFloorplans && syncHit.siteFloorplans.length > 0) {
-        setSiteFloorplans(syncHit.siteFloorplans);
-      }
-      setDataLoaded(true);
-      setLastPlacedRoomName(null);
-      setPendingRooms([]);
-
-      floorplanLogger.ensureSwitch(floorplanId, syncHit.floorplan.name, 'Route Change');
-      floorplanLogger.recordDataSuccess(floorplanId, {
-        source: preloaded ? 'Memory (Preloaded floorplan state)' : 'LocalStorage (Sync cache)',
-        roomsCount: (syncHit.floorplan.rooms || []).length,
-        equipmentCount: (syncHit.floorplan.equipment || []).length,
-        ticketsCount: (syncHit.floorplan.tickets || []).length,
-        floorplanName: syncHit.floorplan.name
-      });
-    } else {
-      // True cold cache miss: clear previous floorplan pins and show loader
-      if (setPdfLoaded) setPdfLoaded(false);
-      setFloorplan(null);
-      setRooms([]);
-      setEquipment([]);
-      setTickets([]);
-      setDataLoaded(false);
-      setLastPlacedRoomName(null);
-      setPendingRooms([]);
-      floorplanLogger.ensureSwitch(floorplanId, null, 'Route Change');
-      floorplanLogger.recordDataStart(floorplanId);
-    }
 
     async function checkCacheAndLoad() {
+      floorplanLogger.ensureSwitch(floorplanId, null, 'Route Change');
+      floorplanLogger.recordDataStart(floorplanId);
+      const fpIdNum = parseInt(floorplanId, 10);
+
+      // Check preloadedFloorplan or in-memory siteFloorplans first
+      let preloaded = null;
+      if (preloadedFloorplan && preloadedFloorplan.id === fpIdNum) {
+        preloaded = preloadedFloorplan;
+      } else if (siteFloorplansRef.current.length > 0) {
+        const found = siteFloorplansRef.current.find(fp => fp.id === fpIdNum);
+        if (found) preloaded = found;
+      }
+
+      // Fallback to synchronous localStorage hit
+      const syncHit = preloaded ? { floorplan: preloaded, siteFloorplans: siteFloorplansRef.current } : getCachedFloorplanSync(floorplanId);
+      let loadedFromCache = Boolean(syncHit?.floorplan);
+      let cachedEtag = null;
+
+      if (syncHit?.floorplan && active) {
+        floorplanRef.current = syncHit.floorplan;
+        setFloorplan(syncHit.floorplan);
+        setRooms(syncHit.floorplan.rooms || []);
+        setEquipment(syncHit.floorplan.equipment || []);
+        setTickets(syncHit.floorplan.tickets || []);
+        if (syncHit.siteFloorplans && syncHit.siteFloorplans.length > 0) {
+          setSiteFloorplans(syncHit.siteFloorplans);
+        }
+        setDataLoaded(true);
+        floorplanLogger.recordDataSuccess(floorplanId, {
+          source: preloaded ? 'Memory (Preloaded floorplan state)' : 'LocalStorage (Sync cache)',
+          roomsCount: (syncHit.floorplan.rooms || []).length,
+          equipmentCount: (syncHit.floorplan.equipment || []).length,
+          ticketsCount: (syncHit.floorplan.tickets || []).length,
+          floorplanName: syncHit.floorplan.name
+        });
+      }
 
       try {
         if ('caches' in window) {
@@ -356,7 +344,7 @@ export function useMapData(floorplanId, activeActionType, setPdfLoaded, preloade
     return () => {
       active = false;
     };
-  }, [floorplanId, loadMapData, setPdfLoaded, preloadedFloorplan]);
+  }, [floorplanId, loadMapData, setPdfLoaded]);
 
   return {
     floorplan,
@@ -377,8 +365,6 @@ export function useMapData(floorplanId, activeActionType, setPdfLoaded, preloade
     setDataLoaded,
     isRefreshing,
     setIsRefreshing,
-    loadError,
-    setLoadError,
     loadMapData
   };
 }

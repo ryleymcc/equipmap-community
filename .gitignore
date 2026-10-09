@@ -1,4 +1,4 @@
-# Environment variables and secrets (Strict SOC 2 enforcement)
+# Environment variables and secrets
 .env
 .env.*
 *.env

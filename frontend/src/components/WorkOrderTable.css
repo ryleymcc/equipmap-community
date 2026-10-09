@@ -1,0 +1,215 @@
+.wo-header-icon-badge {
+  color: var(--text-primary);
+}
+
+.wo-view-tab.overdue.active {
+  background: var(--danger-subtle);
+  border-color: var(--danger-border);
+  color: var(--danger-color);
+}
+
+.wo-view-tab.overdue.active .wo-tab-badge {
+  background: var(--danger-subtle);
+  color: var(--danger-color);
+}
+
+.wo-header-actions > .btn.btn-secondary {
+  min-height: var(--control-height-md);
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-md);
+}
+
+.wo-selection-column input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  display: block;
+}
+
+.wo-request-requester {
+  color: var(--text-secondary);
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.wo-number-column,
+.wo-cell-number {
+  text-align: right;
+}
+
+/* Keep the number and its two quick actions in one stable horizontal group.
+   The identifier may compress, but the print/copy controls never wrap. */
+.wo-cell-number .wo-number-row {
+  width: 100%;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.wo-cell-number .wo-number-badge {
+  min-width: 0;
+  max-width: max-content;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wo-cell-number .wo-row-print-btn,
+.wo-cell-number .wo-copy-btn {
+  flex: 0 0 auto;
+}
+
+.wo-task-code-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.wo-cell-category,
+.wo-cell-task-description {
+  min-width: 0;
+}
+
+.wo-trade-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius-xs);
+  background: var(--info-subtle);
+  color: var(--info-color);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-semibold);
+}
+
+.wo-mobile-list-state {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-7);
+  border: 1px dashed var(--surface-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.wo-mobile-list-state > svg {
+  color: var(--primary-color);
+}
+
+.wo-mobile-list-state strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-card-title);
+}
+
+.wo-mobile-list-state span {
+  max-width: 36ch;
+  font-size: var(--font-size-body);
+}
+
+.wo-copy-btn .text-success,
+.wo-bulk-btn-close svg {
+  color: var(--success-color);
+}
+
+.wo-display-tabs {
+  width: fit-content;
+  margin: 0 0 var(--space-4) auto;
+  padding: var(--space-1);
+  display: inline-flex;
+  gap: var(--space-1);
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+}
+
+.wo-display-tabs button {
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.wo-display-tabs button.active {
+  color: var(--text-primary);
+  background: var(--primary-subtle);
+}
+
+.wo-display-tabs button:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+@media (max-width: 860px) {
+  .wo-display-tabs {
+    width: 100%;
+    margin-bottom: var(--space-3);
+  }
+
+  .wo-display-tabs button {
+    min-height: var(--control-height-lg);
+    flex: 1;
+  }
+
+  .wo-header-actions > .wo-action-btn,
+  .wo-header-actions > .btn.btn-secondary,
+  .work-orders-container .wo-mobile-filter-toggle,
+  .work-orders-container .wo-page-btn,
+  .wo-mobile-list-state .btn {
+    min-height: var(--control-height-lg);
+  }
+
+  .wo-header-actions > .wo-action-btn,
+  .wo-header-actions > .btn.btn-secondary,
+  .work-orders-container .wo-page-btn {
+    min-width: var(--control-height-lg);
+  }
+
+  .wo-header-actions.has-selection {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .wo-header-actions.has-selection > .wo-bulk-actions-bar {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .wo-header-actions.has-selection > .wo-action-btn,
+  .wo-header-actions.has-selection > .btn.btn-secondary {
+    display: none;
+  }
+}
+
+
+/* Reserve readable space for locations, technician names, and order actions. */
+.wo-col-selection { width: 3%; }
+.wo-col-request { width: 18%; }
+.wo-col-date { width: 9%; }
+.wo-col-category { width: 9%; }
+.wo-col-task { width: 13%; }
+.wo-col-location { width: 11%; }
+.wo-col-status { width: 11%; }
+.wo-col-technician { width: 11%; }
+.wo-col-number { width: 15%; }

@@ -1,12 +1,14 @@
 import { useRef } from 'react';
 import { MapPin, Trash2, Check } from 'lucide-react';
 import { COLORS } from '../mapConstants';
-
+import { useAuth } from '../AuthContext';
+import WorkOrderHistorySection from './WorkOrderHistorySection';
 
 export function EquipmentForm({
   editingEquipment,
   newPinCoord,
   isEditor,
+  user: propUser,
   isMobile,
   formError,
   setFormError,
@@ -17,6 +19,8 @@ export function EquipmentForm({
   onRelocate,
   onDelete
 }) {
+  const { user: contextUser } = useAuth();
+  const user = propUser || contextUser;
   const equipNameRef = useRef(null);
   const equipDescRef = useRef(null);
   const isEditing = !!editingEquipment;
@@ -32,13 +36,12 @@ export function EquipmentForm({
     const form = e.currentTarget;
     const name = isEditing ? (form.elements?.name?.value || '') : (equipNameRef.current?.value || '');
     const description = isEditing ? (form.elements?.description?.value || '') : (equipDescRef.current?.value || '');
+    const toolsRequired = form.elements?.tools_required?.value || '';
 
     if (name.includes('*') || name.includes('?') || description.includes('*') || description.includes('?')) {
       setFormError("Name and description cannot contain * or ?");
       return;
     }
-
-    const toolsRequired = form.elements?.tools_required?.value || '';
 
     onSubmit({
       name,
@@ -193,7 +196,13 @@ export function EquipmentForm({
         {!isMobile && actionButtons}
       </form>
 
-
+      {isEditing && (
+        <WorkOrderHistorySection
+          item={editingEquipment}
+          itemType="equipment"
+          currentUser={user}
+        />
+      )}
     </div>
   );
 }

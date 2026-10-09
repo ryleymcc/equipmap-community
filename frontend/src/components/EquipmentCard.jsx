@@ -1,7 +1,7 @@
 import {
   Map as MapIcon, Building,
   Check, X, Pencil, ExternalLink, Trash2,
-  Wrench
+  Wrench, ClipboardList, Calendar
 } from 'lucide-react';
 import { COLORS } from '../mapConstants';
 
@@ -17,7 +17,9 @@ export default function EquipmentCard({
   handleDeleteEquip,
   goToMap,
   selectedEquipIds = [],
-  toggleEquipSelection
+  toggleEquipSelection,
+  onViewWorkOrders,
+  onOpenPMSchedules
 }) {
   if (!equip) return null;
 
@@ -160,7 +162,25 @@ export default function EquipmentCard({
               </button>
             )}
 
+            <button
+              type="button"
+              className="btn btn-secondary btn-card-action"
+              onClick={() => onViewWorkOrders && onViewWorkOrders(equip, 'equipment')}
+              title="View Work Orders"
+            >
+              <ClipboardList size={13} className="flex-shrink-0" />
+              <span>Work Orders</span>
+            </button>
 
+            <button
+              type="button"
+              className="btn btn-secondary btn-card-action"
+              onClick={() => onOpenPMSchedules && onOpenPMSchedules(equip, 'equipment')}
+              title="View PM Schedules"
+            >
+              <Calendar size={13} className="flex-shrink-0" />
+              <span>PM</span>
+            </button>
 
             <div className="items-center gap-xs flex-nowrap ml-auto">
               <button

@@ -1,7 +1,14 @@
-/* global __BUILD_TIME__, __APP_VERSION__ */
-import { memo } from 'react';
-import { X, ArrowLeft, Map as MapIcon, Check, AlertTriangle, Crosshair, User as UserIcon, LogOut, LogIn, Cloud, CloudOff, RefreshCw, Loader2 } from 'lucide-react';
+/* global __APP_VERSION__, __BUILD_TIME__ */
+import { memo, useState, useEffect } from 'react';
+import { X, ArrowLeft, Map as MapIcon, Check, AlertTriangle, Crosshair, User as UserIcon, LogOut, LogIn, Cloud, CloudOff, RefreshCw, Loader2, Bell, BellRing, BellOff } from 'lucide-react';
 import { useOffline } from '../OfflineContext';
+import {
+  isPushNotificationSupported,
+  getNotificationPermission,
+  subscribeUserToPush,
+  unsubscribeUserFromPush
+} from '../pushNotifications';
+import { NotificationBlockedModal } from './NotificationBlockedModal';
 
 export const LeftDrawer = memo(function LeftDrawer({
   isOpen,
@@ -22,15 +29,41 @@ export const LeftDrawer = memo(function LeftDrawer({
   const returnTo = location?.state?.returnTo;
   const hasDashboardReturn = Boolean(returnTo?.pathname?.startsWith('/'));
   const backLabels = {
-
+    '/work-orders': 'Work Orders',
     '/equipment': 'Equipment',
     '/rooms': 'Rooms',
-    '/issues': 'Issues',
-    '/tickets': 'Issues'
+    '/tickets': 'Issue Tickets'
   };
   const backLabel = backLabels[returnTo?.pathname] || 'Dashboard';
   const { isSyncing, lastSyncTime, syncData } = useOffline();
 
+  const [notifPermission, setNotifPermission] = useState(getNotificationPermission());
+  const [isSubscribingNotif, setIsSubscribingNotif] = useState(false);
+  const [isBlockedModalOpen, setIsBlockedModalOpen] = useState(false);
+
+  useEffect(() => {
+    setNotifPermission(getNotificationPermission());
+  }, [user]);
+
+  const handleToggleNotifications = async () => {
+    if (!user?.id) return;
+    setIsSubscribingNotif(true);
+    try {
+      if (notifPermission === 'granted') {
+        await unsubscribeUserFromPush(user.id);
+        setNotifPermission('default');
+      } else {
+        const res = await subscribeUserToPush(user.id);
+        if (res.success) {
+          setNotifPermission('granted');
+        } else if (res.reason === 'permission_denied') {
+          setNotifPermission('denied');
+        }
+      }
+    } finally {
+      setIsSubscribingNotif(false);
+    }
+  };
 
   const handleBackToDashboard = () => {
     if (hasDashboardReturn) {
@@ -119,10 +152,7 @@ export const LeftDrawer = memo(function LeftDrawer({
       {isEditor && (
         <button
           className="btn btn-secondary btn-full mt-sm gap-sm"
-          onClick={() => {
-            onEnterCalibration();
-            if (onClose) onClose();
-          }}
+          onClick={onEnterCalibration}
         >
           <Crosshair size={16} />
           {(floorplan?.reference_points || []).length === 2 ? 'Edit Calibration' : 'Calibrate Alignment'}
@@ -131,6 +161,60 @@ export const LeftDrawer = memo(function LeftDrawer({
 
       <div className="mt-auto pt-xl">
         <div className="drawer-footer drawer-footer-bottom">
+          {/* Push Notifications Toggle */}
+          {user && isPushNotificationSupported() && (
+            <div className="drawer-notif-box">
+              <div className="flex-between items-center gap-sm">
+                <div className="items-center gap-sm overflow-hidden">
+                  {notifPermission === 'granted' ? (
+                    <BellRing size={14} color="#10b981" />
+                  ) : notifPermission === 'denied' ? (
+                    <BellOff size={14} color="#ef4444" />
+                  ) : (
+                    <Bell size={14} color="var(--text-secondary)" />
+                  )}
+                  <span className="text-xs font-semibold text-primary text-truncate">
+                    {notifPermission === 'granted'
+                      ? 'Push notifications active'
+                      : notifPermission === 'denied'
+                      ? 'Notifications blocked'
+                      : 'Push notifications'}
+                  </span>
+                </div>
+                {notifPermission === 'denied' ? (
+                  <button
+                    onClick={() => setIsBlockedModalOpen(true)}
+                    className="btn btn-primary"
+                    style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem', background: '#ef4444' }}
+                    title="Notifications blocked in browser. Click for instructions to unblock."
+                  >
+                    Unblock
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleToggleNotifications}
+                    disabled={isSubscribingNotif}
+                    className={`btn ${notifPermission === 'granted' ? 'btn-secondary' : 'btn-primary'}`}
+                    style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                    title={notifPermission === 'granted' ? 'Disable push notifications' : 'Enable push notifications for assigned work orders'}
+                  >
+                    {isSubscribingNotif
+                      ? '...'
+                      : notifPermission === 'granted'
+                      ? 'Disable'
+                      : 'Enable'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <NotificationBlockedModal
+            isOpen={isBlockedModalOpen}
+            onClose={() => setIsBlockedModalOpen(false)}
+            userId={user?.id}
+            onPermissionChanged={(newPerm) => setNotifPermission(newPerm)}
+          />
 
           {/* Offline Sync Status */}
           <div className="drawer-sync-box">

@@ -1,7 +1,5 @@
-import { Map as MapIcon, MoreVertical, Pencil, Trash2, RefreshCw, Upload, Scale } from 'lucide-react';
+import { Map as MapIcon, MoreVertical, Pencil, Trash2, RefreshCw, Upload } from 'lucide-react';
 import { floorplanLogger } from '../floorplanLogger';
-import { useRef, useState } from 'react';
-import RoomScanModal from './RoomScanModal';
 
 export default function FloorplanGrid({
   activeSite,
@@ -21,10 +19,6 @@ export default function FloorplanGrid({
   setActiveDropdownFpId,
   setFloorplanToRename,
   setIsRenameModalOpen,
-  setFloorplanToReplaceFile,
-  setIsReplaceFileModalOpen,
-  setFloorplanToRescale,
-  setIsRescaleModalOpen,
   handleDeleteFloorplan,
   setIsUploadModalOpen,
   isEditor = false,
@@ -34,11 +28,8 @@ export default function FloorplanGrid({
   setIsRenameSiteModalOpen,
   handleDeleteSite
 }) {
-  const [scanFloorplan, setScanFloorplan] = useState(null);
-  const scanTrigger = useRef(null);
   return (
     <div className="list-view-container">
-      {scanFloorplan && <RoomScanModal floorplan={scanFloorplan} onClose={() => { setScanFloorplan(null); scanTrigger.current?.focus(); }} onApplied={() => navigate(`/map/${scanFloorplan.id}`)} />}
       <div className="flex-between flex-wrap gap-lg mb-xl">
         <div className="items-center gap-md">
           {isLoading && !activeSite ? (
@@ -159,7 +150,7 @@ export default function FloorplanGrid({
               onDrop={isEditor ? (e) => handleDrop(e, index) : undefined}
               onClick={() => {
                 floorplanLogger.startSwitch(fp.id, fp.name, 'Dashboard Floorplan Card');
-                navigate(`/map/${fp.id}`, { state: { preloadedFloorplan: fp } });
+                navigate(`/map/${fp.id}`);
               }}
               style={{
                 zIndex: floorplans.length - index
@@ -207,40 +198,6 @@ export default function FloorplanGrid({
                           <Pencil size={16} />
                           <span>Rename</span>
                         </button>
-                        <button
-                          className="dropdown-item"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveDropdownFpId(null);
-                            if (setFloorplanToReplaceFile) setFloorplanToReplaceFile(fp);
-                            if (setIsReplaceFileModalOpen) setIsReplaceFileModalOpen(true);
-                          }}
-                        >
-                          <Upload size={16} />
-                          <span>Replace Image / PDF</span>
-                        </button>
-                        <button
-                          className="dropdown-item"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveDropdownFpId(null);
-                            if (setFloorplanToRescale) setFloorplanToRescale(fp);
-                            if (setIsRescaleModalOpen) setIsRescaleModalOpen(true);
-                          }}
-                        >
-                          <Scale size={16} />
-                          <span>Rescale Floorplan</span>
-                        </button>
-                        {['pdf', 'image'].includes(fp.file_type) && <button
-                          className="dropdown-item"
-                          onClick={event => {
-                            scanTrigger.current = event.currentTarget.closest('.dropdown-container')?.querySelector('.card-options-btn');
-                            setActiveDropdownFpId(null); setScanFloorplan(fp);
-                          }}
-                        >
-                          <MapIcon size={16} />
-                          <span>Generate room pins</span>
-                        </button>}
                         <button
                           className="dropdown-item text-danger"
                           onClick={(e) => {

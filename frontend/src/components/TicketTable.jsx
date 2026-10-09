@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import  { useState, useMemo } from 'react';
 import {
   AlertCircle, CheckCircle, Map as MapIcon, Building,
   ExternalLink, Trash2, ChevronUp, ChevronDown, User,
@@ -15,17 +15,15 @@ export default function TicketTable({
   ticketSortField,
   ticketSortOrder,
   toggleTicketSort,
-  user,
-  isLoading,
-  isBackgroundSyncing
+  user
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
-  const [prevFilteredLength, setPrevFilteredLength] = useState(filteredTickets.length);
 
   // Reset to page 1 when filtered items change
-  if (filteredTickets.length !== prevFilteredLength) {
-    setPrevFilteredLength(filteredTickets.length);
+  const [previousCount, setPreviousCount] = useState(filteredTickets.length);
+  if (previousCount !== filteredTickets.length) {
+    setPreviousCount(filteredTickets.length);
     setCurrentPage(1);
   }
 
@@ -43,12 +41,7 @@ export default function TicketTable({
         <div className="items-center gap-md">
           <AlertCircle size={24} color="#f59e0b" />
           <h2 className="text-lg font-semibold m-0">
-            Reported Issues ({filteredTickets.length !== allTickets.length ? `${filteredTickets.length} of ${allTickets.length}` : allTickets.length})
-            {isBackgroundSyncing && (
-              <span className="text-2xs text-muted font-normal ml-xs">
-                • updating...
-              </span>
-            )}
+            Issue Tickets ({filteredTickets.length !== allTickets.length ? `${filteredTickets.length} of ${allTickets.length}` : allTickets.length})
           </h2>
         </div>
       </div>
@@ -109,27 +102,12 @@ export default function TicketTable({
               </tr>
             </thead>
             <tbody>
-              {isLoading && allTickets.length === 0 ? (
-                [1, 2, 3, 4, 5].map((rowKey) => (
-                  <tr key={rowKey}>
-                    <td>
-                      <div className="skeleton skeleton-text" style={{ width: `${60 + (rowKey % 3) * 15}%`, height: '16px' }} />
-                      <div className="skeleton skeleton-text mt-xs" style={{ width: `${40 + (rowKey % 4) * 10}%`, height: '12px' }} />
-                    </td>
-                    <td><div className="skeleton" style={{ width: '80px', height: '22px', borderRadius: '12px' }} /></td>
-                    <td><div className="skeleton skeleton-text" style={{ width: '90px', height: '14px' }} /></td>
-                    <td><div className="skeleton skeleton-text" style={{ width: '100px', height: '14px' }} /></td>
-                    <td><div className="skeleton skeleton-text" style={{ width: '80px', height: '14px' }} /></td>
-                    <td><div className="skeleton skeleton-text" style={{ width: '70px', height: '14px' }} /></td>
-                    <td><div className="skeleton" style={{ width: '50px', height: '28px', borderRadius: '6px' }} /></td>
-                  </tr>
-                ))
-              ) : filteredTickets.length === 0 ? (
+              {filteredTickets.length === 0 ? (
                 <tr>
                   <td colSpan={7}>
                     <div className="list-empty">
                       <AlertCircle size={48} className="list-empty-icon" />
-                      <p>No reported issues found</p>
+                      <p>No tickets found</p>
                     </div>
                   </td>
                 </tr>
@@ -179,7 +157,7 @@ export default function TicketTable({
                             <ExternalLink size={16} />
                           </button>
                           {canDelete && (
-                            <button className="row-action-btn delete-btn" title="Delete Issue" onClick={() => handleDeleteTicket(ticket.id)}>
+                            <button className="row-action-btn delete-btn" title="Delete" onClick={() => handleDeleteTicket(ticket.id)}>
                               <Trash2 size={16} />
                             </button>
                           )}
@@ -196,15 +174,10 @@ export default function TicketTable({
 
       {/* Mobile Card List View */}
       <div className="table-mobile-view">
-        {isLoading && allTickets.length === 0 ? (
-          <div className="list-empty">
-            <div className="skeleton" style={{ width: '48px', height: '48px', borderRadius: '50%', margin: '0 auto 1rem' }} />
-            <div className="skeleton skeleton-text" style={{ width: '140px', height: '16px', margin: '0 auto' }} />
-          </div>
-        ) : filteredTickets.length === 0 ? (
+        {filteredTickets.length === 0 ? (
           <div className="list-empty">
             <AlertCircle size={48} className="list-empty-icon" />
-            <p>No reported issues found</p>
+            <p>No tickets found</p>
           </div>
         ) : (
           paginatedTickets.map(ticket => (
@@ -222,17 +195,17 @@ export default function TicketTable({
 
       {/* Pagination Footer */}
       {filteredTickets.length > 0 && (
-        <div className="list-pagination-panel glass-panel flex-between p-md mt-md flex-wrap gap-md">
+        <div className="wo-pagination-panel glass-panel flex-between p-md mt-md flex-wrap gap-md">
           {/* Info & Page Size */}
           <div className="items-center gap-lg">
             <span className="text-sm text-muted">
-              Showing <strong className="text-primary">{pageSize === 'all' ? 1 : ((validCurrentPage - 1) * pageSize + 1).toLocaleString()}</strong> - <strong className="text-primary">{pageSize === 'all' ? filteredTickets.length.toLocaleString() : Math.min(validCurrentPage * pageSize, filteredTickets.length).toLocaleString()}</strong> of <strong className="text-primary">{filteredTickets.length.toLocaleString()}</strong> issues
+              Showing <strong className="text-primary">{pageSize === 'all' ? 1 : ((validCurrentPage - 1) * pageSize + 1).toLocaleString()}</strong> - <strong className="text-primary">{pageSize === 'all' ? filteredTickets.length.toLocaleString() : Math.min(validCurrentPage * pageSize, filteredTickets.length).toLocaleString()}</strong> of <strong className="text-primary">{filteredTickets.length.toLocaleString()}</strong> tickets
             </span>
 
             <div className="items-center gap-xs">
               <span className="text-xs text-muted">Per page:</span>
               <select
-                className="input-field list-pagesize-control" aria-label="Items per page"
+                className="wo-pagesize-select"
                 value={pageSize}
                 onChange={e => {
                   const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
@@ -253,7 +226,7 @@ export default function TicketTable({
           {pageSize !== 'all' && totalPages > 1 && (
             <div className="items-center gap-xs">
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(1)}
                 disabled={validCurrentPage === 1}
                 title="First Page"
@@ -262,7 +235,7 @@ export default function TicketTable({
               </button>
 
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={validCurrentPage === 1}
                 title="Previous Page"
@@ -275,7 +248,7 @@ export default function TicketTable({
               </span>
 
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={validCurrentPage === totalPages}
                 title="Next Page"
@@ -284,7 +257,7 @@ export default function TicketTable({
               </button>
 
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={validCurrentPage === totalPages}
                 title="Last Page"

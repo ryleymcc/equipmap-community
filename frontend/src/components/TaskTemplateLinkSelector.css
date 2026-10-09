@@ -1,0 +1,142 @@
+.task-template-link {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-height-lg);
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-lg);
+  background: var(--primary-subtle);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.task-template-link.is-empty {
+  border-style: dashed;
+  background: var(--surface-card);
+}
+
+.task-template-link.is-loading {
+  border-color: var(--surface-border);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+}
+
+.task-template-link-summary,
+.task-template-link-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.task-template-link-summary {
+  flex: 1 1 auto;
+}
+
+.task-template-link-summary > svg,
+.task-template-link-icon {
+  flex: 0 0 auto;
+}
+
+.task-template-link-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+}
+
+.task-template-link-actions {
+  flex: 0 0 auto;
+  gap: var(--space-2);
+}
+
+.task-template-link-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius-full);
+  background: var(--info-subtle);
+  color: var(--info-color);
+  font-size: var(--font-size-eyebrow);
+  font-weight: var(--font-weight-semibold);
+}
+
+.task-template-link-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-template-link-name strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.task-template-link.is-linked:hover .task-template-link-name,
+.task-template-link.is-linked:focus-within .task-template-link-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.task-template-link.is-empty .task-template-link-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.task-template-link .btn {
+  min-height: var(--control-height-sm);
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .task-template-link {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+  }
+
+  .task-template-link-summary {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .task-template-link-name {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .task-template-link-actions,
+  .task-template-link.is-empty > .btn {
+    align-self: stretch;
+    width: 100%;
+  }
+
+  .task-template-link-actions .btn {
+    flex: 1 1 0;
+    min-height: var(--control-height-lg);
+  }
+
+  .task-template-link.is-empty > .btn {
+    justify-content: center;
+    min-height: var(--control-height-lg);
+  }
+}

@@ -12,6 +12,8 @@ is a summary, not a replacement for their complete license texts.
 - Caddy: Apache-2.0.
 - Outfit font: SIL Open Font License; currently fetched from Google Fonts.
 - Lucide icons: ISC.
+- croniter: MIT; used for legacy cron recurrence compatibility.
+  https://github.com/pallets-eco/croniter
 
 The Python requirements and frontend package-lock.json describe dependencies.
 Container base images include additional packages with their own licenses.

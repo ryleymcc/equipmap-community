@@ -3,7 +3,7 @@ import {
   DoorOpen, Map as MapIcon, Building,
   Check, X, Pencil, ExternalLink, Trash2,
   MapPin, MapPinOff, ArrowUpDown, ArrowUp, ArrowDown,
-  RefreshCw,
+  ClipboardList, Calendar, RefreshCw,
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import RoomCard from './RoomCard';
@@ -27,14 +27,17 @@ export default function RoomTable({
   setRoomLocFilter,
   roomSortField = 'name',
   roomSortOrder = 'asc',
-  toggleRoomSort
+  toggleRoomSort,
+  onViewWorkOrders,
+  onOpenPMSchedules
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [prevFilteredLength, setPrevFilteredLength] = useState(filteredRooms.length);
 
-  const [previousCount, setPreviousCount] = useState(filteredRooms.length);
-  if (previousCount !== filteredRooms.length) {
-    setPreviousCount(filteredRooms.length);
+  // Reset to page 1 when filtered items change
+  if (prevFilteredLength !== filteredRooms.length) {
+    setPrevFilteredLength(filteredRooms.length);
     setCurrentPage(1);
   }
 
@@ -264,7 +267,21 @@ export default function RoomTable({
                                 </button>
                               )}
 
+                              <button
+                                className="row-action-btn text-accent-light"
+                                title="View Work Orders"
+                                onClick={() => onViewWorkOrders && onViewWorkOrders(room, 'room')}
+                              >
+                                <ClipboardList size={16} />
+                              </button>
 
+                              <button
+                                className="row-action-btn text-accent-light"
+                                title="View PM Schedules"
+                                onClick={() => onOpenPMSchedules && onOpenPMSchedules(room, 'room')}
+                              >
+                                <Calendar size={16} />
+                              </button>
 
                               {isUnlocated && isEditor ? (
                                 <button
@@ -335,7 +352,8 @@ export default function RoomTable({
               handleDeleteRoom={handleDeleteRoom}
               goToMap={goToMap}
               goToPlaceRoom={goToPlaceRoom}
-
+              onViewWorkOrders={onViewWorkOrders}
+              onOpenPMSchedules={onOpenPMSchedules}
             />
           ))
         )}
@@ -343,7 +361,7 @@ export default function RoomTable({
 
       {/* Pagination Footer */}
       {filteredRooms.length > 0 && (
-        <div className="list-pagination-panel glass-panel flex-between p-md mt-md flex-wrap gap-md">
+        <div className="wo-pagination-panel glass-panel flex-between p-md mt-md flex-wrap gap-md">
           {/* Info & Page Size */}
           <div className="items-center gap-lg">
             <span className="text-sm text-muted">
@@ -353,7 +371,7 @@ export default function RoomTable({
             <div className="items-center gap-xs">
               <span className="text-xs text-muted">Per page:</span>
               <select
-                className="input-field list-pagesize-control" aria-label="Items per page"
+                className="wo-pagesize-select"
                 value={pageSize}
                 onChange={e => {
                   const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
@@ -374,7 +392,7 @@ export default function RoomTable({
           {pageSize !== 'all' && totalPages > 1 && (
             <div className="items-center gap-xs">
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(1)}
                 disabled={validCurrentPage === 1}
                 title="First Page"
@@ -383,7 +401,7 @@ export default function RoomTable({
               </button>
 
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={validCurrentPage === 1}
                 title="Previous Page"
@@ -396,7 +414,7 @@ export default function RoomTable({
               </span>
 
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={validCurrentPage === totalPages}
                 title="Next Page"
@@ -405,7 +423,7 @@ export default function RoomTable({
               </button>
 
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={validCurrentPage === totalPages}
                 title="Last Page"

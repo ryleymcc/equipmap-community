@@ -1,7 +1,7 @@
 import {
   DoorOpen, Map as MapIcon, Building,
   Check, X, Pencil, ExternalLink, Trash2,
-  MapPin, MapPinOff
+  MapPin, MapPinOff, ClipboardList, Calendar
 } from 'lucide-react';
 
 export default function RoomCard({
@@ -15,7 +15,9 @@ export default function RoomCard({
   setEditingRoomId,
   handleDeleteRoom,
   goToMap,
-  goToPlaceRoom
+  goToPlaceRoom,
+  onViewWorkOrders,
+  onOpenPMSchedules
 }) {
   if (!room) return null;
 
@@ -128,7 +130,25 @@ export default function RoomCard({
               </button>
             )}
 
+            <button
+              type="button"
+              className="btn btn-secondary btn-card-action"
+              onClick={() => onViewWorkOrders && onViewWorkOrders(room, 'room')}
+              title="View Work Orders"
+            >
+              <ClipboardList size={13} className="flex-shrink-0" />
+              <span>Work Orders</span>
+            </button>
 
+            <button
+              type="button"
+              className="btn btn-secondary btn-card-action"
+              onClick={() => onOpenPMSchedules && onOpenPMSchedules(room, 'room')}
+              title="View PM Schedules"
+            >
+              <Calendar size={13} className="flex-shrink-0" />
+              <span>PM</span>
+            </button>
 
             <div className="items-center gap-xs flex-nowrap ml-auto">
               {isUnlocated && isEditor ? (

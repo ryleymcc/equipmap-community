@@ -20,7 +20,7 @@ stopping other services.
 Clone the new community repository and enter it:
 
 ```sh
-git clone https://github.com/ryleymcc/equipmap-community.git
+git clone --branch cmms https://github.com/ryleymcc/equipmap-community.git
 cd equipmap-community
 cp .env.example .env
 chmod 600 .env
@@ -83,7 +83,17 @@ docker compose up -d --force-recreate backend
 That variable only creates an admin when there are no users; it does not reset
 an existing password. Use User Management to create individual accounts.
 
+For this branch, also create a native work order, record labor, close it, and
+verify it in Completed and the equipment/room work-order history. Configure
+task templates, trades, permissions, and PM schedules using [CMMS.md](CMMS.md).
+Keep one backend worker: the preventive-maintenance runner starts inside it.
+
 ## 4. Optional integrations
+
+Browser push uses generated VAPID keys in the persistent backend_data volume.
+Set VAPID_CLAIMS_SUB to your operator contact (for example
+mailto:maintenance@example.com). Users must grant browser permission.
+Remote push requires HTTPS and a supported browser. Back up the keys.
 
 Sentry is off by default. Supply your own SENTRY_DSN and VITE_SENTRY_DSN to enable
 it, review collection/privacy settings, and rebuild the frontend after changes.
@@ -126,7 +136,7 @@ Restore into an isolated, empty deployment using the saved secrets/revision:
 docker compose up -d db
 # Wait for db to report healthy before the next command.
 docker compose cp backups/database.dump db:/tmp/database.dump
-docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-ryleymcc --exit-on-error /tmp/database.dump'
+docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error /tmp/database.dump'
 tar -xzf backups/uploads.tar.gz
 docker compose run --rm --no-deps -v "$PWD/backups:/backup" --entrypoint sh backend -c 'tar -xzf /backup/backend-data.tar.gz -C /app/data'
 docker compose up -d --build
@@ -151,6 +161,10 @@ to obtain the new shell. Schema updates currently run at startup; there is no
 formal reversible migration system. A rollback may require both the prior source
 revision and its matching database/uploads backup. Rebuilding the old image alone
 does not undo schema changes.
+
+This guide targets the cmms branch. The main branch is the smaller mapping
+edition. Do not change editions on a live database without first testing the
+saved backup in a separate deployment.
 
 Never use docker compose down -v on a deployment you want to retain.
 

@@ -51,12 +51,13 @@ export function useCalibration({
                       siteFloorplans.find(fp => fp.id !== numericFloorplanId);
       if (otherFp) {
         targetBaseId = otherFp.id.toString();
-        setBaseFloorplanId(targetBaseId);
+        // Synchronize the fallback floorplan when its transform is loaded.
+        void Promise.resolve().then(() => setBaseFloorplanId(targetBaseId));
       }
     }
 
     if (targetBaseId) {
-      loadInitialTransform(targetBaseId);
+      void Promise.resolve().then(() => loadInitialTransform(targetBaseId));
     }
   }, [floorplanId, floorplan, calibrationMode, siteFloorplans, baseFloorplanId, loadInitialTransform]);
 

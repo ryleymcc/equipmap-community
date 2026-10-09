@@ -1,7 +1,6 @@
-import { useRef, useState, useEffect } from 'react';
-import { X, MapPin, Edit3, Building, UploadCloud, Layers, Plus, Check, Upload, RefreshCw } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { X, MapPin, Edit3, Building, UploadCloud, Layers, Plus, Check } from 'lucide-react';
 import { COLORS } from '../mapConstants';
-import FloorplanRescaleModal from './FloorplanRescaleModal';
 
 export default function DashboardModals({
   // Rename Floorplan
@@ -10,22 +9,6 @@ export default function DashboardModals({
   floorplanToRename,
   setFloorplanToRename,
   handleRenameFloorplan,
-
-  // Replace Floorplan File
-  isReplaceFileModalOpen,
-  setIsReplaceFileModalOpen,
-  floorplanToReplaceFile,
-  setFloorplanToReplaceFile,
-  handleReplaceFloorplanFile,
-  isReplacingFile,
-
-  // Rescale Floorplan
-  isRescaleModalOpen,
-  setIsRescaleModalOpen,
-  floorplanToRescale,
-  setFloorplanToRescale,
-  handleRescaleFloorplan,
-  isRescaling,
 
   // Site Modals
   isSiteModalOpen,
@@ -67,30 +50,23 @@ export default function DashboardModals({
   const renameSiteNameRef = useRef();
   const planNameRef = useRef();
   const fileRef = useRef();
-  const replaceFileRef = useRef();
-
-  const [selectedReplaceFile, setSelectedReplaceFile] = useState(null);
-  const [openRescaleAfter, setOpenRescaleAfter] = useState(true);
 
   const [addName, setAddName] = useState('');
   const [addDescription, setAddDescription] = useState('');
   const [addToolsRequired, setAddToolsRequired] = useState('');
   const [addColor, setAddColor] = useState(COLORS[0]);
 
-  useEffect(() => {
-    if (!isReplaceFileModalOpen) {
-      setSelectedReplaceFile(null);
-    }
-  }, [isReplaceFileModalOpen]);
-
-  useEffect(() => {
+  const selectionKey = isAddSelectionModalOpen ? addSelectionType : null;
+  const [previousSelectionKey, setPreviousSelectionKey] = useState(selectionKey);
+  if (previousSelectionKey !== selectionKey) {
+    setPreviousSelectionKey(selectionKey);
     if (isAddSelectionModalOpen) {
       setAddName('');
       setAddDescription('');
       setAddToolsRequired('');
       setAddColor(COLORS[0]);
     }
-  }, [isAddSelectionModalOpen, addSelectionType]);
+  }
 
   return (
     <>
@@ -278,137 +254,6 @@ export default function DashboardModals({
           </div>
         </div>
       )}
-
-      {/* Replace Floorplan File Modal */}
-      {isReplaceFileModalOpen && floorplanToReplaceFile && (
-        <div
-          className="modal-overlay modal-backdrop-dark"
-          onClick={() => {
-            if (!isReplacingFile) {
-              setIsReplaceFileModalOpen(false);
-              setFloorplanToReplaceFile(null);
-              setSelectedReplaceFile(null);
-            }
-          }}
-        >
-          <div className="modal-card modal-md glass-panel" onClick={e => e.stopPropagation()}>
-            <div className="modal-card-header">
-              <div className="flex items-center gap-sm">
-                <div className="icon-box-primary">
-                  <UploadCloud size={18} />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-primary m-0">Replace Floorplan File</h2>
-                  <div className="text-xs text-muted">
-                    Updating background for <strong className="text-primary">{floorplanToReplaceFile.name}</strong>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-ghost btn-icon-xs text-muted hover:text-primary"
-                disabled={isReplacingFile}
-                onClick={() => {
-                  setIsReplaceFileModalOpen(false);
-                  setFloorplanToReplaceFile(null);
-                  setSelectedReplaceFile(null);
-                }}
-                title="Close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const file = selectedReplaceFile || replaceFileRef.current?.files?.[0];
-                if (file && handleReplaceFloorplanFile) {
-                  handleReplaceFloorplanFile(floorplanToReplaceFile.id, file, openRescaleAfter);
-                }
-              }}
-              className="modal-card-body"
-            >
-              <div className="input-group">
-                <label>Select New File (PDF, Image, SVG, or GLB)</label>
-                <input
-                  ref={replaceFileRef}
-                  type="file"
-                  accept=".svg,.pdf,.png,.jpg,.jpeg,.webp,.gif,.glb,image/*,model/gltf-binary"
-                  className="input-field"
-                  required
-                  disabled={isReplacingFile}
-                  onChange={(e) => {
-                    if (e.target.files?.[0]) {
-                      setSelectedReplaceFile(e.target.files[0]);
-                    }
-                  }}
-                />
-              </div>
-
-              {selectedReplaceFile && (
-                <div className="p-sm rounded text-xs flex items-center gap-xs" style={{ backgroundColor: 'var(--surface-sunken)', border: '1px solid var(--panel-border)' }}>
-                  <Upload size={14} className="text-primary" />
-                  <span className="font-semibold">{selectedReplaceFile.name}</span>
-                  <span className="text-muted">({(selectedReplaceFile.size / 1024).toFixed(1)} KB)</span>
-                </div>
-              )}
-
-              <div className="p-sm rounded text-xs text-muted" style={{ backgroundColor: 'var(--surface-sunken)', border: '1px solid var(--panel-border)' }}>
-                ℹ️ <strong>Note:</strong> All existing equipment pins, rooms, tickets, and calibrated reference points on this floorplan will be preserved.
-              </div>
-
-              <div className="flex items-center gap-xs">
-                <input
-                  type="checkbox"
-                  id="open-rescale-after"
-                  checked={openRescaleAfter}
-                  onChange={e => setOpenRescaleAfter(e.target.checked)}
-                  disabled={isReplacingFile}
-                />
-                <label htmlFor="open-rescale-after" className="m-0 text-xs font-medium cursor-pointer">
-                  Open Rescale tool after upload to adjust scale & alignment
-                </label>
-              </div>
-
-              <div className="modal-card-footer mt-md">
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={isReplacingFile}
-                  onClick={() => {
-                    setIsReplaceFileModalOpen(false);
-                    setFloorplanToReplaceFile(null);
-                    setSelectedReplaceFile(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary btn-sm gap-xs"
-                  disabled={isReplacingFile || (!selectedReplaceFile && !replaceFileRef.current?.files?.[0])}
-                >
-                  {isReplacingFile && <RefreshCw size={14} className="spinning" />}
-                  <span>{isReplacingFile ? 'Replacing...' : 'Replace File'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Rescale Floorplan Modal */}
-      <FloorplanRescaleModal
-        isOpen={isRescaleModalOpen}
-        onClose={() => {
-          if (setIsRescaleModalOpen) setIsRescaleModalOpen(false);
-          if (setFloorplanToRescale) setFloorplanToRescale(null);
-        }}
-        floorplan={floorplanToRescale}
-        onApplyRescale={handleRescaleFloorplan}
-        isRescaling={isRescaling}
-      />
 
       {/* Create Site Modal */}
       {isSiteModalOpen && (

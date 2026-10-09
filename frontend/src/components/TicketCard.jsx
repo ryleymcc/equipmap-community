@@ -1,3 +1,4 @@
+import 'react';
 import {
   AlertCircle, CheckCircle, Map as MapIcon, Building,
   ExternalLink, Trash2, User, Calendar
@@ -98,7 +99,7 @@ export default function TicketCard({
               type="button"
               className="btn btn-ghost btn-card-action text-danger btn-icon"
               onClick={() => handleDeleteTicket(ticket.id)}
-              title="Delete Issue"
+              title="Delete Ticket"
             >
               <Trash2 size={13} className="flex-shrink-0" />
             </button>

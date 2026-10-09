@@ -627,6 +627,8 @@
   right: 0;
   z-index: 9999;
 }
+
+/* Work Order Notification Blocked Floating Banner */
 .notif-blocked-banner {
   position: fixed;
   bottom: 1.5rem;
@@ -789,6 +791,38 @@
   flex-shrink: 0;
 }
 
+.task-sheet-item {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.task-sheet-header {
+  padding: 0.55rem 0.85rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--surface-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.task-sheet-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .modal-card-footer-between {
   padding: 0.75rem 1.15rem;
   border-top: 1px solid var(--surface-border);
@@ -855,6 +889,49 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
+}
+
+.wo-number-text {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  font-family: monospace;
+  letter-spacing: -0.01em;
+}
+
+.wo-location-container {
+  padding: 0.45rem 0.65rem;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.wo-close-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+  cursor: pointer;
+  line-height: 1.2;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.wo-close-btn:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #6ee7b7;
+}
+
+.wo-close-btn:active {
+  transform: scale(0.97);
 }
 
 .badge-tag-blue {
@@ -1297,6 +1374,58 @@
   border: none;
 }
 
+.remapper-left-panel {
+  width: 50%;
+  background: rgba(15, 23, 42, 0.95);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+}
+
+.step-badge-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.dropzone-box {
+  border: 2px dashed var(--surface-border);
+  border-radius: 8px;
+  padding: 1.5rem 1rem;
+  transition: all 0.2s;
+}
+
+.ref-point-box {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.remapper-canvas-panel {
+  background: #0b1120;
+}
+
+.floating-calibration-toast {
+  position: absolute;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  background: rgba(239, 68, 68, 0.9);
+  padding: 0.75rem 1.5rem;
+  border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  display: flex;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  backdrop-filter: blur(8px);
+}
+
 .border-top-subtle {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -1466,8 +1595,54 @@
 
 @media (max-width: 768px) {
   /* Fullscreen Modal Overlays on Mobile - No outer padding around dialog */
+  :is(
+    .modal-overlay,
+    .modal-backdrop,
+    .modal-backdrop-dark,
+    .pm-backdrop,
+    .pm-detail-backdrop,
+    .wo-edit-overlay,
+    .task-modal-layer-create,
+    .task-modal-layer-select,
+    .task-modal-layer-detail,
+    .wo-print-modal-backdrop
+  ) {
+    padding: 0 !important;
+    margin: 0 !important;
+    align-items: stretch !important;
+    justify-content: stretch !important;
+    inset: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
 
   /* Fullscreen Modal Dialog Cards on Mobile - No borders or margins around it */
+  :is(
+    .modal-card,
+    .modal-box-card,
+    .modal-content,
+    .modal-box-large,
+    .modal-box-medium,
+    .modal-sm,
+    .modal-md,
+    .modal-lg,
+    .modal-xl,
+    .modal-2xl,
+    .modal-max-400,
+    .modal-max-600,
+    .modal-content-wide,
+    .wo-create-modal,
+    .wo-edit-modal,
+    .pm-studio,
+    .pm-detail-modal,
+    .close-wo-modal,
+    .task-create-modal,
+    .task-detail-modal,
+    .task-select-modal,
+    .modal-card-notif-instructions,
+    .trade-quick-manage-modal,
+    .modal-wo-print
+  ),
   :is(.modal-overlay, .modal-backdrop, .modal-backdrop-dark) > :is(.modal-card, .modal-box-card, .modal-content, .glass-panel, form, div:first-child) {
     width: 100vw !important;
     width: 100% !important;
@@ -1491,7 +1666,9 @@
   .modal-card-header,
   .modal-header,
   .pm-studio-header,
-  .pm-detail-header {
+  .pm-detail-header,
+  .wo-edit-modal-header,
+  .wo-create-modal-header {
     padding: max(var(--space-4, 12px), env(safe-area-inset-top, 12px)) var(--space-4, 16px) var(--space-3, 10px) !important;
     border-radius: 0 !important;
     border-left: 0 !important;
@@ -1505,7 +1682,10 @@
   .modal-scroll-body,
   .modal-body-scrollable,
   .pm-studio-body,
-  .pm-detail-body {
+  .pm-detail-body,
+  .wo-edit-form-body,
+  .wo-create-form-body,
+  .wo-create-success-body {
     flex: 1 1 auto !important;
     min-height: 0 !important;
     overflow-y: auto !important;
@@ -1517,6 +1697,9 @@
   .modal-card-footer,
   .modal-footer,
   .modal-card-footer-between,
+  .wo-edit-modal-footer,
+  .wo-create-modal-footer,
+  .wo-create-success-footer,
   .pm-savebar,
   .task-modal-footer {
     padding: var(--space-3, 10px) var(--space-4, 16px) max(var(--space-4, 12px), env(safe-area-inset-bottom, 12px)) !important;
@@ -1906,28 +2089,4 @@
 .uncalibrated-toast-close:hover {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.1);
-}
-
-/* Shared by equipment, room, and ticket list pagination. */
-.list-pagination-panel {
-  border-radius: var(--radius-lg);
-  background: var(--surface-elevated);
-}
-.list-pagesize-control {
-  width: auto;
-  min-height: var(--control-height-md);
-}
-.list-page-btn {
-  min-width: var(--control-height-md);
-  min-height: var(--control-height-md);
-  padding: var(--space-2);
-}
-@media (max-width: 700px) {
-  .list-pagesize-control,
-  .list-page-btn {
-    min-height: var(--control-height-lg);
-  }
-  .list-page-btn {
-    min-width: var(--control-height-lg);
-  }
 }

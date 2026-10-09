@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import  { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { getAuditLogs, undoAction } from '../api';
@@ -6,8 +6,8 @@ import {
   History as HistoryIcon, Building, Map as MapIcon, Package, DoorOpen,
   Menu, Info, RotateCcw, RefreshCw, User, X
 } from 'lucide-react';
-import DashboardLeftDrawer from '../components/DashboardLeftDrawer';
 import PendingChatGPTChanges from '../components/PendingChatGPTChanges';
+import DashboardLeftDrawer from '../components/DashboardLeftDrawer';
 
 export default function AuditHistory() {
   const navigate = useNavigate();
@@ -18,7 +18,6 @@ export default function AuditHistory() {
   const [isUndoLoading, setIsUndoLoading] = useState(null); // ID of log being undid
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
-  const [pendingRefresh, setPendingRefresh] = useState(0);
 
   const canUndoLog = (log) => {
     if (log.action === 'undo') return false;
@@ -28,7 +27,7 @@ export default function AuditHistory() {
     return false;
   };
 
-  const loadLogs = useCallback(async () => {
+  const loadLogs = async () => {
     try {
       setIsLoading(true);
       const res = await getAuditLogs();
@@ -38,7 +37,7 @@ export default function AuditHistory() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     if (!loading && !isEditor) {
@@ -61,8 +60,8 @@ export default function AuditHistory() {
   }, [loading, isEditor, navigate, location]);
 
   useEffect(() => {
-    if (isEditor) queueMicrotask(loadLogs);
-  }, [isEditor, loadLogs]);
+    if (isEditor) void Promise.resolve().then(loadLogs);
+  }, [isEditor]);
 
   const handleUndo = async (logId) => {
     if (!window.confirm('Are you sure you want to undo this action?')) return;
@@ -125,15 +124,16 @@ export default function AuditHistory() {
           </div>
           <button
             className="trigger-btn"
-            onClick={() => { loadLogs(); setPendingRefresh((value) => value + 1); }}
+            onClick={loadLogs}
             title="Refresh Logs"
           >
             <RefreshCw size={20} className={isLoading ? 'spinning' : ''} />
           </button>
         </header>
 
+        {user && <PendingChatGPTChanges onChanged={loadLogs} />}
+
         <div className="list-view-container">
-          <PendingChatGPTChanges refreshKey={pendingRefresh} onChanged={loadLogs} />
           {isLoading ? (
             <div className="flex-center p-2xl">
               <div className="loader">Loading history...</div>

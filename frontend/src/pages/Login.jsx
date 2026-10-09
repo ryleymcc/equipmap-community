@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react';
@@ -12,11 +12,19 @@ const Login = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { login } = useAuth();
+  const { user, login, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = location.state?.from || { pathname: "/" };
+  const from = useMemo(() => location.state?.from || { pathname: "/" }, [location.state?.from]);
+
+  useEffect(() => {
+    if (!loading && user) {
+      const destinationPath = (!from?.pathname || from.pathname === '/') ? '/work-orders' : from.pathname;
+      const fullDestination = destinationPath + (from?.search || '');
+      navigate(fullDestination, { replace: true });
+    }
+  }, [user, loading, navigate, from]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -43,13 +51,33 @@ const Login = () => {
         alert(`Your account (${user.role}) does not have permission to access that page.`);
         navigate(backToPath, { replace: true });
       } else {
+        // Set role-based default work order filters
+        const isTech = user.role === 'technician' || (!isAdmin && user.role === 'editor');
+        if (isTech) {
+          localStorage.setItem('wo_filter_tech', user.username);
+          localStorage.setItem('wo_filter_status', 'open');
+        } else if (isAdmin || user.can_triage) {
+          localStorage.setItem('wo_filter_tech', 'Unassigned');
+          localStorage.setItem('wo_filter_status', 'all');
+        } else {
+          localStorage.setItem('wo_filter_tech', 'all');
+          localStorage.setItem('wo_filter_status', 'open');
+        }
+        localStorage.setItem('wo_filter_search', '');
+
+        // Determine destination: Default root "/" redirects to "/work-orders" for signed-in users
+        const destinationPath = (!from?.pathname || from.pathname === '/') ? '/work-orders' : from.pathname;
+        const fullDestination = destinationPath + (from?.search || "");
+
+        // Build a clean, serializable state without raw DOM objects
+        const cleanState = { restoreState: true };
+        if (location.state?.mapState) cleanState.mapState = location.state.mapState;
+        if (location.state?.dashboardState) cleanState.dashboardState = location.state.dashboardState;
+
         // Pass the captured state back to the destination
-        navigate((from.pathname || "/") + (from.search || ""), {
+        navigate(fullDestination, {
           replace: true,
-          state: {
-            ...location.state, // Pass through dashboardState or mapState
-            restoreState: true
-          }
+          state: cleanState
         });
       }
     } catch (err) {

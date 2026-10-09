@@ -18,6 +18,12 @@ Current limitations:
 - Database startup errors are logged while /health can still return success.
 - Schema changes use startup code rather than a versioned migration framework.
 - PWA/browser caches can retain operational data.
+- Push subscription registration accepts unauthenticated requests tied to user
+  IDs. Keep push endpoints behind the deployment's access gateway as well.
+
+Public maintenance requests record requester contact fields, IP address,
+user-agent, and submitted device details for triage. Set an appropriate retention
+policy and explain this collection to requesters.
 
 For sensitive deployments, use a VPN or access gateway in front of the entire
 application. URL knowledge must not be treated as authorization. Public source

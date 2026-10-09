@@ -5,11 +5,9 @@ import { useAuth } from '../AuthContext';
 import {
   getSites, createSite, updateSite, deleteSite, getFloorplans, uploadFloorplan, deleteFloorplan,
   getAllEquipment, getAllRooms, getAllTickets, updateEquipment, updateRoom, deleteEquipment, deleteRoom, deleteTicket,
-  updateFloorplan, replaceFloorplanFile, rescaleFloorplan, updateFloorplansSortOrder, bulkUpdateEquipment,
-    LOW_PRIORITY_CONFIG
+  updateFloorplan, updateFloorplansSortOrder, bulkUpdateEquipment, getWorkOrders, getErrorMessage, LOW_PRIORITY_CONFIG
 } from '../api';
 import { searchClientEntities } from '../searchEngine';
-
 import {
   getCachedDashboardData,
   setCachedDashboardData,
@@ -18,6 +16,8 @@ import {
   populateFloorplansIntoApiCache
 } from '../cacheUtils';
 import { floorplanLogger } from '../floorplanLogger';
+import { isWorkOrderOverdue } from '../utils/workOrderDueDate';
+import { getWorkOrderSource } from '../utils/workOrderSource';
 
 const sharedCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
@@ -25,7 +25,7 @@ export function useDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const auth = useAuth();
-  const { user, logout, isAdmin } = auth;
+  const { user, logout, isAdmin, loading: isAuthLoading } = auth;
   const isEditor = auth.isEditor;
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -57,8 +57,8 @@ export function useDashboard() {
   const [allEquipment, setAllEquipment] = useState(() => getCachedDashboardData('equipment') || []);
   const [allRooms, setAllRooms] = useState(() => getCachedDashboardData('rooms') || []);
   const [allTickets, setAllTickets] = useState(() => getCachedDashboardData('tickets') || []);
-
-
+  const [allWorkOrders, setAllWorkOrders] = useState([]);
+  const [workOrderSummary, setWorkOrderSummary] = useState(null);
 
   // Loading and background syncing states
   const [isLoadingSites, setIsLoadingSites] = useState(() => (getCachedDashboardData('sites') || []).length === 0);
@@ -69,18 +69,16 @@ export function useDashboard() {
   });
   const [isLoadingEquipment, setIsLoadingEquipment] = useState(() => (getCachedDashboardData('equipment') || []).length === 0);
   const [isLoadingRooms, setIsLoadingRooms] = useState(() => (getCachedDashboardData('rooms') || []).length === 0);
-  const [isLoadingTickets, setIsLoadingTickets] = useState(() => (getCachedDashboardData('tickets') || []).length === 0);
-
+  const [isLoadingWorkOrders, setIsLoadingWorkOrders] = useState(() => (
+    location.pathname === '/work-orders' ||
+    (location.pathname === '/' && typeof window !== 'undefined' && Boolean(localStorage.getItem('token')))
+  ));
 
   const [isBackgroundSyncingFloorplans, setIsBackgroundSyncingFloorplans] = useState(false);
   const [isBackgroundSyncingEquipment, setIsBackgroundSyncingEquipment] = useState(false);
   const [isBackgroundSyncingRooms, setIsBackgroundSyncingRooms] = useState(false);
-  const [isBackgroundSyncingTickets, setIsBackgroundSyncingTickets] = useState(false);
-  const [isBackgroundSyncing] = useState(false);
-
-
-
-
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+  const [workOrderError, setWorkOrderError] = useState(null);
 
   // Selection state
   const [selectedEquipIds, setSelectedEquipIds] = useState([]);
@@ -109,12 +107,6 @@ export function useDashboard() {
 
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [floorplanToRename, setFloorplanToRename] = useState(null);
-  const [isReplaceFileModalOpen, setIsReplaceFileModalOpen] = useState(false);
-  const [floorplanToReplaceFile, setFloorplanToReplaceFile] = useState(null);
-  const [isReplacingFile, setIsReplacingFile] = useState(false);
-  const [isRescaleModalOpen, setIsRescaleModalOpen] = useState(false);
-  const [floorplanToRescale, setFloorplanToRescale] = useState(null);
-  const [isRescaling, setIsRescaling] = useState(false);
   const [activeDropdownFpId, setActiveDropdownFpId] = useState(null);
 
   // Drag & drop state
@@ -152,19 +144,54 @@ export function useDashboard() {
     return '';
   });
 
+  const getCachedWOFilter = (key, defaultVal) => {
+    try {
+      const val = localStorage.getItem(`wo_filter_${key}`);
+      return val !== null && val !== undefined ? val : defaultVal;
+    } catch {
+      return defaultVal;
+    }
+  };
 
-
-
+  const [workOrderFilter, setWorkOrderFilter] = useState(() => {
+    if (location.state?.restoreState && location.state?.dashboardState?.workOrderFilter) {
+      return location.state.dashboardState.workOrderFilter;
+    }
+    return getCachedWOFilter('search', '');
+  });
 
   const [debouncedEquipFilter, setDebouncedEquipFilter] = useState(equipFilter);
   const [debouncedRoomFilter, setDebouncedRoomFilter] = useState(roomFilter);
   const [debouncedTicketFilter, setDebouncedTicketFilter] = useState(ticketFilter);
+  const [debouncedWorkOrderFilter, setDebouncedWorkOrderFilter] = useState(workOrderFilter);
 
-
-
-
-
-
+  const [workOrderStatusFilter, setWorkOrderStatusFilter] = useState(() => {
+    const cached = getCachedWOFilter('status', null);
+    if (cached !== null) return cached;
+    if (user) {
+      if (isAdmin || auth.canTriage) return 'all';
+      return 'open';
+    }
+    return 'all';
+  });
+  const [workOrderPriorityFilter, setWorkOrderPriorityFilter] = useState(() => getCachedWOFilter('priority', 'all'));
+  const [workOrderCategoryFilter, setWorkOrderCategoryFilter] = useState(() => getCachedWOFilter('category', 'all'));
+  const [workOrderSourceFilter, setWorkOrderSourceFilter] = useState(() => getCachedWOFilter('source', 'all'));
+  const [workOrderTradeFilter, setWorkOrderTradeFilter] = useState(() => {
+    const tradeParam = searchParams.get('trade');
+    if (tradeParam) return tradeParam;
+    return getCachedWOFilter('trade', 'all');
+  });
+  const [workOrderTechFilter, setWorkOrderTechFilter] = useState(() => {
+    const cached = getCachedWOFilter('tech', null);
+    if (cached !== null) return cached;
+    const isTech = user && !isAdmin && (user.role === 'technician' || user.role === 'editor');
+    if (isTech) return user.username;
+    if (user && (isAdmin || auth.canTriage)) return 'Unassigned';
+    return 'all';
+  });
+  const [workOrderDateFilter, setWorkOrderDateFilter] = useState(() => getCachedWOFilter('date', 'all'));
+  const [workOrderLastUpdated, setWorkOrderLastUpdated] = useState(null);
 
   const [equipSortField, setEquipSortField] = useState('name');
   const [equipSortOrder, setEquipSortOrder] = useState('asc'); // 'asc' or 'desc'
@@ -172,16 +199,17 @@ export function useDashboard() {
   const [ticketSortField, setTicketSortField] = useState('created_at');
   const [ticketSortOrder, setTicketSortOrder] = useState('desc');
 
-
-
+  const [workOrderSortField, setWorkOrderSortField] = useState(() => getCachedWOFilter('sort_field', 'created_at'));
+  const [workOrderSortOrder, setWorkOrderSortOrder] = useState(() => getCachedWOFilter('sort_order', 'desc'));
 
   const [roomLocFilter, setRoomLocFilter] = useState('all'); // 'all' | 'located' | 'unlocated'
   const [roomSortField, setRoomSortField] = useState('name');
-  const [roomSortOrder, setRoomSortOrder] = useState('asc'); // 'asc' | 'desc'
+  const [roomSortOrder, setRoomSortOrder] = useState('asc'); // 'asc' or 'desc'
 
   // Tab views
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false);
   const [isPlusDropdownOpen, setIsPlusDropdownOpen] = useState(false);
+  const [isCreateWorkOrderOpen, setIsCreateWorkOrderOpen] = useState(false);
 
   const [activeView, setActiveView] = useState(() => {
     if (location.state?.restoreState && location.state?.dashboardState?.activeView) {
@@ -189,8 +217,10 @@ export function useDashboard() {
     }
     if (location.pathname === '/rooms') return 'rooms';
     if (location.pathname === '/equipment') return 'equipment';
-    if (location.pathname === '/issues' || location.pathname === '/tickets') return 'tickets';
-
+    if (location.pathname === '/tickets') return 'tickets';
+    if (location.pathname === '/work-orders') return 'workorders';
+    if (location.pathname === '/floorplans') return 'floorplans';
+    if (location.pathname === '/' && (user || (typeof window !== 'undefined' && Boolean(localStorage.getItem('token'))))) return 'workorders';
     return 'floorplans';
   });
 
@@ -299,31 +329,38 @@ export function useDashboard() {
     }
   };
 
-  const loadAllTickets = async (background = false) => {
-    if (!background && allTickets.length === 0) {
-      setIsLoadingTickets(true);
-    } else {
-      setIsBackgroundSyncingTickets(true);
-    }
+  const loadAllTickets = async () => {
     try {
       const res = await getAllTickets();
       setAllTickets(res.data);
       setCachedDashboardData('tickets', res.data);
     } catch (error) {
-      console.error('Failed to load issues:', error);
-    } finally {
-      setIsLoadingTickets(false);
-      setIsBackgroundSyncingTickets(false);
+      console.error(error);
     }
   };
 
-
-
-
-
-
-
-
+  const loadWorkOrders = async (forceRefresh = false, background = false) => {
+    if (!background) {
+      setIsLoadingWorkOrders(true);
+    } else {
+      setIsBackgroundSyncing(true);
+    }
+    setWorkOrderError(null);
+    try {
+      const res = await getWorkOrders({ force_refresh: forceRefresh });
+      setAllWorkOrders(res.data.data || []);
+      setWorkOrderSummary(res.data.summary || null);
+      setWorkOrderLastUpdated(new Date());
+    } catch (error) {
+      console.error("Error loading work orders:", error);
+      if (allWorkOrders.length === 0) {
+        setWorkOrderError(getErrorMessage(error, "Failed to load work orders"));
+      }
+    } finally {
+      setIsLoadingWorkOrders(false);
+      setIsBackgroundSyncing(false);
+    }
+  };
 
   // --- Effects below function declarations ---
 
@@ -365,22 +402,49 @@ export function useDashboard() {
     }
   }, [activeSite?.id]);
 
+  // Synchronize role-based default filters for authenticated users
+  const userInitFilterRef = useRef(false);
+  useEffect(() => {
+    if (user && !userInitFilterRef.current) {
+      userInitFilterRef.current = true;
+      const isTech = !isAdmin && (user.role === 'technician' || user.role === 'editor');
+      const hasCachedTech = localStorage.getItem('wo_filter_tech');
+      const hasCachedStatus = localStorage.getItem('wo_filter_status');
+
+      if (isTech) {
+        if (!hasCachedTech) {
+          setWorkOrderTechFilter(user.username);
+        }
+        if (!hasCachedStatus) {
+          setWorkOrderStatusFilter('open');
+        }
+      } else if (isAdmin || auth.canTriage) {
+        if (!hasCachedTech) {
+          setWorkOrderTechFilter('Unassigned');
+        }
+        if (!hasCachedStatus) {
+          setWorkOrderStatusFilter('all');
+        }
+      }
+    }
+  }, [user, isAdmin, auth.canTriage]);
+
   // Load contextual list data when view changes
   useEffect(() => {
     if (activeView === 'equipment') loadAllEquipment();
     if (activeView === 'rooms') loadAllRooms();
-    if (activeView === 'tickets') loadAllTickets(allTickets.length > 0);
-
+    if (activeView === 'tickets') loadAllTickets();
+    if (activeView === 'workorders') {
+      loadWorkOrders();
+    }
   }, [activeView]);
 
-  // Sync activeView with route path transitions (back/forward, external navigation)
+  // If user state is resolved and active view is workorders without work orders loaded, trigger loadWorkOrders
   useEffect(() => {
-    if (location.pathname === '/rooms') setActiveView('rooms');
-    else if (location.pathname === '/equipment') setActiveView('equipment');
-    else if (location.pathname === '/issues' || location.pathname === '/tickets') setActiveView('tickets');
-    else if (location.pathname === '/' || location.pathname === '/floorplans') setActiveView('floorplans');
-  }, [location.pathname]);
-
+    if (user && activeView === 'workorders' && allWorkOrders.length === 0 && !isLoadingWorkOrders) {
+      loadWorkOrders();
+    }
+  }, [user, activeView, allWorkOrders.length, isLoadingWorkOrders]);
 
   // Load initial sites
   useEffect(() => {
@@ -457,7 +521,12 @@ export function useDashboard() {
     return () => clearTimeout(timer);
   }, [ticketFilter]);
 
-
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedWorkOrderFilter(workOrderFilter);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [workOrderFilter]);
 
   const handleSearchResultClick = (result) => {
     floorplanLogger.startSwitch(result.floorplan_id, result.floorplan_name || null, 'Dashboard Global Search');
@@ -597,63 +666,6 @@ export function useDashboard() {
     }
   };
 
-  const handleReplaceFloorplanFile = async (floorplanId, file, openRescaleAfter = false) => {
-    if (!floorplanId || !file) return;
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-      setIsReplacingFile(true);
-      const res = await replaceFloorplanFile(floorplanId, formData);
-      const updatedFp = res.data;
-      setFloorplans(prev => {
-        const next = prev.map(f => f.id === floorplanId ? { ...f, ...updatedFp } : f);
-        if (activeSite?.id) setCachedDashboardData(`floorplans_${activeSite.id}`, next);
-        return next;
-      });
-      setIsReplaceFileModalOpen(false);
-      setFloorplanToReplaceFile(null);
-      if (activeSite?.id) {
-        loadFloorplans(activeSite.id, true);
-      }
-      if (openRescaleAfter) {
-        setFloorplanToRescale(updatedFp);
-        setIsRescaleModalOpen(true);
-      }
-    } catch (error) {
-      console.error(error);
-      alert('Error replacing floorplan file: ' + (error.response?.data?.detail || error.message));
-    } finally {
-      setIsReplacingFile(false);
-    }
-  };
-
-  const handleRescaleFloorplan = async (floorplanId, rescaleData) => {
-    if (!floorplanId || !rescaleData) return;
-    try {
-      setIsRescaling(true);
-      const res = await rescaleFloorplan(floorplanId, rescaleData);
-      const updatedFp = res.data;
-      setFloorplans(prev => {
-        const next = prev.map(f => f.id === floorplanId ? { ...f, ...updatedFp } : f);
-        if (activeSite?.id) setCachedDashboardData(`floorplans_${activeSite.id}`, next);
-        return next;
-      });
-      setIsRescaleModalOpen(false);
-      setFloorplanToRescale(null);
-      if (activeSite?.id) {
-        loadFloorplans(activeSite.id, true);
-      }
-      loadAllEquipment(true);
-      loadAllRooms(true);
-      loadAllTickets();
-    } catch (error) {
-      console.error(error);
-      alert('Error rescaling floorplan: ' + (error.response?.data?.detail || error.message));
-    } finally {
-      setIsRescaling(false);
-    }
-  };
-
   const handleDragStart = (e, index) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -702,17 +714,56 @@ export function useDashboard() {
     }
   };
 
+  // Sync activeView with URL pathname
+  useEffect(() => {
+    if (location.pathname === '/rooms') setActiveView('rooms');
+    else if (location.pathname === '/equipment') setActiveView('equipment');
+    else if (location.pathname === '/tickets') setActiveView('tickets');
+    else if (location.pathname === '/work-orders') setActiveView('workorders');
+    else if (location.pathname === '/floorplans') setActiveView('floorplans');
+    else if (location.pathname === '/') {
+      if (!location.state?.restoreState) {
+        if (user) {
+          navigate('/work-orders', { replace: true });
+        } else if (!auth.loading) {
+          setActiveView('floorplans');
+        }
+      }
+    }
+  }, [location.pathname, location.state, user, auth.loading, navigate]);
+
+  // Handle trade query parameter in URL
+  useEffect(() => {
+    const tradeParam = searchParams.get('trade');
+    if (tradeParam) {
+      setWorkOrderTradeFilter(tradeParam);
+      setWorkOrderStatusFilter('all');
+    }
+  }, [searchParams]);
+
   const handleNavClick = (view) => {
-    setActiveView(view);
     setIsLeftDrawerOpen(false);
     if (view === 'rooms') {
+      setActiveView('rooms');
       navigate('/rooms');
     } else if (view === 'equipment') {
+      setActiveView('equipment');
       navigate('/equipment');
     } else if (view === 'tickets') {
-      navigate('/issues');
+      setActiveView('tickets');
+      navigate('/tickets');
+    } else if (view === 'workorders') {
+      setActiveView('workorders');
+      navigate('/work-orders');
+    } else if (view === 'audit-log' || view === 'audit-history') {
+      navigate('/audit-log', { state: { from: { pathname: location.pathname, search: location.search, hash: location.hash } } });
+    } else if (view === 'users') {
+      navigate('/users', { state: { from: { pathname: location.pathname, search: location.search, hash: location.hash } } });
+    } else if (view === 'remapper') {
+      navigate('/remapper', { state: { from: { pathname: location.pathname, search: location.search, hash: location.hash } } });
     } else {
-      navigate('/');
+      setActiveView('floorplans');
+      navigate('/floorplans');
     }
   };
 
@@ -893,24 +944,76 @@ export function useDashboard() {
     }
   };
 
-  const goToMap = (item) => {
-    if (item.map_url) {
-      navigate(item.map_url, {
-        state: { targetResult: item }
+  const goToMap = (item, explicitType = null) => {
+    if (!item) return;
+
+    const scrollY = typeof window === 'undefined' ? 0 : Math.max(0, window.scrollY || 0);
+    const scrollStorageKey = location.pathname === '/work-orders'
+      ? `equipmap:work-order-scroll:${location.key}`
+      : null;
+    if (scrollStorageKey) {
+      try {
+        window.sessionStorage.setItem(scrollStorageKey, String(scrollY));
+      } catch {
+        // The explicit map return state below remains available if storage is unavailable.
+      }
+    }
+
+    const returnTo = {
+      pathname: location.pathname,
+      search: location.search,
+      scrollY,
+      scrollStorageKey
+    };
+
+    // Handle wrapped { type: 'room', data: r } format or direct entity
+    let target = item;
+    let itemType = explicitType || item.type;
+    if (item.data && (item.type || explicitType)) {
+      target = { ...item.data };
+      itemType = explicitType || item.type;
+    }
+
+    if (target.map_url) {
+      navigate(target.map_url, {
+        state: { targetResult: target, returnTo }
       });
       return;
     }
-    const itemType = item.type || (item.color !== undefined ? 'equipment' : (item.status !== undefined ? 'ticket' : 'room'));
-    const url = item.id && itemType && itemType !== 'floorplan'
-      ? `/map/${item.floorplan_id}?highlightType=${itemType}&highlightId=${item.id}`
-      : `/map/${item.floorplan_id}`;
 
-    if (item.floorplan_id) {
-      floorplanLogger.startSwitch(item.floorplan_id, item.floorplan_name || null, `Dashboard ${itemType || 'Item'} View on Map`);
+    // Determine type if not specified
+    if (!itemType) {
+      if (target.order_number || target.category) itemType = 'workOrder';
+      else if (target.color !== undefined || target.tools_required !== undefined) itemType = 'equipment';
+      else if (target.status !== undefined && target.order_number === undefined) itemType = 'ticket';
+      else itemType = 'room';
     }
 
+    // Determine floorplan_id
+    let floorplanId = target.floorplan_id;
+    if (!floorplanId && target.rooms?.length > 0) {
+      floorplanId = target.rooms[0].floorplan_id;
+    }
+    if (!floorplanId && target.equipment?.length > 0) {
+      floorplanId = target.equipment[0].floorplan_id;
+    }
+
+    if (!floorplanId) {
+      console.warn("Cannot navigate to map: Item has no associated floorplan_id", target);
+      return;
+    }
+
+    const url = target.id && itemType && itemType !== 'floorplan'
+      ? `/map/${floorplanId}?highlightType=${itemType}&highlightId=${target.id}`
+      : `/map/${floorplanId}`;
+
+    floorplanLogger.startSwitch(floorplanId, target.floorplan_name || null, `Dashboard ${itemType || 'Item'} View on Map`);
+
     navigate(url, {
-      state: { targetResult: { ...item, type: itemType } }
+      state: {
+        targetResult: { ...target, type: itemType, floorplan_id: floorplanId },
+        returnTo
+      }
     });
   };
 
@@ -1079,19 +1182,254 @@ export function useDashboard() {
       });
   }, [allTickets, debouncedTicketFilter, ticketSortField, ticketSortOrder]);
 
+  // Persist work order filters to browser localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('wo_filter_search', workOrderFilter || '');
+      localStorage.setItem('wo_filter_status', workOrderStatusFilter || 'all');
+      localStorage.setItem('wo_filter_priority', workOrderPriorityFilter || 'all');
+      localStorage.setItem('wo_filter_category', workOrderCategoryFilter || 'all');
+      localStorage.setItem('wo_filter_source', workOrderSourceFilter || 'all');
+      localStorage.setItem('wo_filter_trade', workOrderTradeFilter || 'all');
+      localStorage.setItem('wo_filter_tech', workOrderTechFilter || 'all');
+      localStorage.setItem('wo_filter_date', workOrderDateFilter || 'all');
+      localStorage.setItem('wo_filter_sort_field', workOrderSortField || 'created_at');
+      localStorage.setItem('wo_filter_sort_order', workOrderSortOrder || 'desc');
+    } catch (e) {
+      console.warn('Failed to save work order filters to localStorage:', e);
+    }
+  }, [
+    workOrderFilter,
+    workOrderStatusFilter,
+    workOrderPriorityFilter,
+    workOrderCategoryFilter,
+    workOrderSourceFilter,
+    workOrderTradeFilter,
+    workOrderTechFilter,
+    workOrderDateFilter,
+    workOrderSortField,
+    workOrderSortOrder
+  ]);
 
+  const toggleWorkOrderSort = (field) => {
+    if (workOrderSortField === field) {
+      setWorkOrderSortOrder(workOrderSortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setWorkOrderSortField(field);
+      setWorkOrderSortOrder(field.includes('date') || field.includes('_at') ? 'desc' : 'asc');
+    }
+  };
 
+  const resetWorkOrderFilters = () => {
+    setWorkOrderFilter('');
+    setWorkOrderStatusFilter('all');
+    setWorkOrderPriorityFilter('all');
+    setWorkOrderCategoryFilter('all');
+    setWorkOrderSourceFilter('all');
+    setWorkOrderTradeFilter('all');
+    setWorkOrderTechFilter('all');
+    setWorkOrderDateFilter('all');
+  };
 
+  const filteredWorkOrders = useMemo(() => {
+    const filter = (debouncedWorkOrderFilter || '').toLowerCase().trim();
+    const hasWildcards = validateWildcards(filter);
+    const regex = hasWildcards ? wildcardToRegex(filter) : null;
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    const now = new Date();
 
+    return allWorkOrders
+      .filter(wo => {
+        // Status Filter
+        if (workOrderStatusFilter !== 'all') {
+          if (workOrderStatusFilter === 'open') {
+            if (wo.status === 'completed' || wo.status === 'cancelled' || wo.status === 'rejected') return false;
+          } else if (workOrderStatusFilter === 'triage_unassigned') {
+            const isUnassigned = !wo.assignees || wo.assignees.length === 0;
+            const isOpen = wo.status !== 'completed' && wo.status !== 'cancelled' && wo.status !== 'rejected';
+            if (wo.status !== 'pending_triage' && !(isOpen && isUnassigned)) return false;
+          } else if (wo.status !== workOrderStatusFilter) {
+            return false;
+          }
+        }
 
+        // Priority Filter
+        if (workOrderPriorityFilter !== 'all' && wo.priority !== workOrderPriorityFilter) {
+          return false;
+        }
 
+        // Category Filter
+        if (workOrderCategoryFilter !== 'all' && wo.category !== workOrderCategoryFilter) {
+          return false;
+        }
 
+        // Maintenance Source Filter
+        if (workOrderSourceFilter !== 'all' && getWorkOrderSource(wo) !== workOrderSourceFilter) return false;
 
-  // Contextual filtered counts (reflecting search, tech, task, and date filters dynamically)
+        // Trade Filter
+        if (workOrderTradeFilter !== 'all' && wo.trade !== workOrderTradeFilter) {
+          return false;
+        }
 
+        // Tech Filter
+        if (workOrderTechFilter !== 'all') {
+          if (workOrderTechFilter === 'Unassigned') {
+            if (wo.assignees && wo.assignees.length > 0) return false;
+          } else {
+            const hasTech = (wo.assignees || []).some(u => u.username === workOrderTechFilter);
+            if (!hasTech) return false;
+          }
+        }
+
+        // Date Filter
+        if (workOrderDateFilter === 'overdue') {
+          if (!isWorkOrderOverdue(wo, now)) return false;
+        } else if (workOrderDateFilter !== 'all') {
+          const dateStr = wo.start_date || wo.created_at;
+          if (dateStr) {
+            const woDate = new Date(dateStr);
+            if (workOrderDateFilter === 'today') {
+              if (woDate.toDateString() !== now.toDateString()) return false;
+            } else if (workOrderDateFilter === 'this_week') {
+              const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+              if (woDate < weekAgo) return false;
+            } else if (workOrderDateFilter === 'this_month') {
+              if (woDate.getMonth() !== now.getMonth() || woDate.getFullYear() !== now.getFullYear()) return false;
+            } else if (workOrderDateFilter === 'past_30') {
+              const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+              if (woDate < thirtyDaysAgo) return false;
+            }
+          }
+        }
+
+        // Search Filter
+        if (!filter) return true;
+
+        // Construct complete searchable text matching all displayed fields and fallbacks
+        const locTitle = wo.floorplan_name
+          ? `${wo.site_name || 'Site'} - ${wo.floorplan_name} ${wo.site_name || 'Site'} ${wo.floorplan_name}`
+          : (wo.site_name || 'Campus');
+
+        const roomNames = (wo.rooms || []).map(r => r.name ? `Room ${r.name} ${r.name} ${r.description || ''} ${r.floorplan_name || ''} ${r.site_name || ''}` : '').join(' ');
+        const equipNames = (wo.equipment || []).map(e => e.name ? `${e.name} ${e.description || ''} ${e.floorplan_name || ''} ${e.site_name || ''}` : '').join(' ');
+
+        const subLocation = (wo.rooms && wo.rooms.length > 0)
+          ? roomNames
+          : ((wo.equipment && wo.equipment.length > 0)
+              ? equipNames
+              : (wo.location_details || 'General Building Area'));
+
+        const assigneeNames = (wo.assignees && wo.assignees.length > 0)
+          ? wo.assignees.map(u => `${u.full_name || ''} ${u.username || ''} ${u.role || ''}`).join(' ')
+          : 'Unassigned Awaiting Dispatch';
+
+        const statusText = `${wo.status || ''} ${wo.status === 'pending_triage' ? 'triage pending' : ''} ${wo.status === 'in_progress' ? 'in progress' : ''}`;
+
+        const searchableText = [
+          wo.order_number,
+          wo.title,
+          wo.description,
+          wo.category,
+          wo.trade,
+          wo.priority,
+          wo.requester_name,
+          wo.requester_email,
+          wo.requester_phone,
+          wo.site_name,
+          wo.floorplan_name,
+          wo.location_details,
+          locTitle,
+          subLocation,
+          roomNames,
+          equipNames,
+          assigneeNames,
+          statusText,
+          wo.completion_notes
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        if (hasWildcards && regex) {
+          return regex.test(searchableText);
+        }
+
+        // 1. Direct contiguous substring match (e.g. "level 5", "room 1en03", "wo-1005")
+        if (searchableText.includes(filter)) {
+          return true;
+        }
+
+        // 2. Normalized phrase match (stripping punctuation/dashes so "Building Level 5" matches "Building - Level 5")
+        const normalizedSearchable = searchableText.replace(/[-_/:,]/g, ' ').replace(/\s+/g, ' ');
+        const normalizedFilter = filter.replace(/[-_/:,]/g, ' ').replace(/\s+/g, ' ');
+        if (normalizedSearchable.includes(normalizedFilter)) {
+          return true;
+        }
+
+        // 3. Token-based matching for cross-field searches (e.g. "Campus General" or "Campus of General")
+        const STOP_WORDS = new Set(['of', 'in', 'on', 'at', 'to', 'for', 'the', 'a', 'an', 'or', 'and', 'with', 'by']);
+        const rawTokens = filter.replace(/[,;:]/g, ' ').split(/\s+/).filter(Boolean);
+        const meaningfulTokens = rawTokens.filter(t => !STOP_WORDS.has(t));
+        const tokensToUse = meaningfulTokens.length > 0 ? meaningfulTokens : rawTokens;
+
+        if (tokensToUse.length === 0) return true;
+
+        return tokensToUse.every(token => {
+          // If token is purely digits (e.g. "5", "1", "101"), ensure it matches as a distinct number boundary
+          // so that "5" does NOT match inside "1005" or "2026"
+          if (/^\d+$/.test(token)) {
+            const numRegex = new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`, 'i');
+            return numRegex.test(searchableText);
+          }
+          // Word boundary or prefix match for alphanumeric tokens
+          const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const wordRegex = new RegExp(`(^|[^a-z0-9])${escaped}`, 'i');
+          return wordRegex.test(searchableText);
+        });
+      })
+      .sort((a, b) => {
+        let valA = a[workOrderSortField] ?? '';
+        let valB = b[workOrderSortField] ?? '';
+
+        if (workOrderSortField === 'created_at' || workOrderSortField === 'date' || workOrderSortField.includes('date') || workOrderSortField.includes('_at')) {
+          const dateA = a[workOrderSortField] || a.created_at || a.start_date || '';
+          const dateB = b[workOrderSortField] || b.created_at || b.start_date || '';
+          const timeA = dateA ? new Date(dateA).getTime() : 0;
+          const timeB = dateB ? new Date(dateB).getTime() : 0;
+          return workOrderSortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+        }
+
+        if (workOrderSortField === 'tech' || workOrderSortField === 'assignees') {
+          const techA = (a.assignees && a.assignees.length > 0) ? (a.assignees[0].full_name || a.assignees[0].username || '') : '';
+          const techB = (b.assignees && b.assignees.length > 0) ? (b.assignees[0].full_name || b.assignees[0].username || '') : '';
+          const result = collator.compare(techA, techB);
+          return workOrderSortOrder === 'asc' ? result : -result;
+        }
+
+        if (workOrderSortField === 'priority') {
+          const priorityWeights = { urgent: 4, critical: 4, high: 3, medium: 2, low: 1 };
+          const weightA = priorityWeights[String(valA).toLowerCase()] || 0;
+          const weightB = priorityWeights[String(valB).toLowerCase()] || 0;
+          return workOrderSortOrder === 'asc' ? weightA - weightB : weightB - weightA;
+        }
+
+        const result = collator.compare(valA.toString(), valB.toString());
+        return workOrderSortOrder === 'asc' ? result : -result;
+      });
+  }, [
+    allWorkOrders,
+    debouncedWorkOrderFilter,
+    workOrderStatusFilter,
+    workOrderPriorityFilter,
+    workOrderCategoryFilter,
+    workOrderSourceFilter,
+    workOrderTradeFilter,
+    workOrderTechFilter,
+    workOrderDateFilter,
+    workOrderSortField,
+    workOrderSortOrder
+  ]);
 
   return {
     user,
+    isAuthLoading,
     logout,
     isEditor,
     isAdmin,
@@ -1102,30 +1440,23 @@ export function useDashboard() {
     allEquipment,
     allRooms,
     allTickets,
-
-
-
+    allWorkOrders,
+    workOrderSummary,
     isLoadingSites,
     isLoadingFloorplans,
     isLoadingEquipment,
     isLoadingRooms,
-    isLoadingTickets,
-    isBackgroundSyncingTickets,
-
+    isLoadingWorkOrders,
     isBackgroundSyncingFloorplans,
     isBackgroundSyncingEquipment,
     isBackgroundSyncingRooms,
     isBackgroundSyncing,
-
-
+    workOrderError,
+    loadWorkOrders,
     loadAllEquipment,
     loadAllRooms,
     loadFloorplans,
     loadSites,
-
-
-
-
     isSiteModalOpen,
     setIsSiteModalOpen,
     isRenameSiteModalOpen,
@@ -1147,16 +1478,6 @@ export function useDashboard() {
     setIsRenameModalOpen,
     floorplanToRename,
     setFloorplanToRename,
-    isReplaceFileModalOpen,
-    setIsReplaceFileModalOpen,
-    floorplanToReplaceFile,
-    setFloorplanToReplaceFile,
-    isReplacingFile,
-    isRescaleModalOpen,
-    setIsRescaleModalOpen,
-    floorplanToRescale,
-    setFloorplanToRescale,
-    isRescaling,
     activeDropdownFpId,
     setActiveDropdownFpId,
     draggedIndex,
@@ -1173,20 +1494,19 @@ export function useDashboard() {
     setRoomFilter,
     ticketFilter,
     setTicketFilter,
-
-
-
-
-
-
-
-
-
-
+    workOrderFilter,
+    setWorkOrderFilter,
+    workOrderStatusFilter,
+    setWorkOrderStatusFilter,
+    workOrderTechFilter,
+    setWorkOrderTechFilter,
     isLeftDrawerOpen,
     setIsLeftDrawerOpen,
     isPlusDropdownOpen,
     setIsPlusDropdownOpen,
+    isCreateWorkOrderOpen,
+    setIsCreateWorkOrderOpen,
+    canCreateWorkOrders: auth.canCreateWorkOrders,
     activeView,
     editingEquipId,
     setEditingEquipId,
@@ -1206,10 +1526,21 @@ export function useDashboard() {
     ticketSortField,
     ticketSortOrder,
     toggleTicketSort,
-
-
-
-
+    workOrderSortField,
+    workOrderSortOrder,
+    toggleWorkOrderSort,
+    resetWorkOrderFilters,
+    workOrderPriorityFilter,
+    setWorkOrderPriorityFilter,
+    workOrderCategoryFilter,
+    setWorkOrderCategoryFilter,
+    workOrderSourceFilter,
+    setWorkOrderSourceFilter,
+    workOrderTradeFilter,
+    setWorkOrderTradeFilter,
+    workOrderDateFilter,
+    setWorkOrderDateFilter,
+    workOrderLastUpdated,
 
     // Handlers
     handleSearchResultClick,
@@ -1219,8 +1550,6 @@ export function useDashboard() {
     handleUploadFloorplan,
     handleDeleteFloorplan,
     handleRenameFloorplan,
-    handleReplaceFloorplanFile,
-    handleRescaleFloorplan,
     handleDragStart,
     handleDragOver,
     handleDragEnd,
@@ -1250,7 +1579,7 @@ export function useDashboard() {
     filteredEquipment,
     filteredRooms,
     filteredTickets,
-
+    filteredWorkOrders,
     navigate,
     location
   };

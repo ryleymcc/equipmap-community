@@ -64,3 +64,34 @@ async def test_rate_limiting_ip_isolation(client: AsyncClient):
         headers={"X-Forwarded-For": "192.0.2.20"}
     )
     assert res_allowed.status_code == 401
+
+@pytest.mark.asyncio
+async def test_public_work_orders_rate_limiting(client: AsyncClient):
+    """
+    Verify rate limiting on public unauthenticated work order creation.
+    """
+    limiter.reset()
+    responses = []
+
+    # Limit is 20/minute
+    for i in range(22):
+        res = await client.post(
+            "/api/work-orders/public",
+            json={
+                "title": f"Test Public WO {i}",
+                "description": "Rate limit test",
+                "requestor_name": "Tester",
+                "requestor_email": "test@example.com"
+            },
+            headers={"X-Forwarded-For": "203.0.113.50"}
+        )
+        responses.append(res)
+
+    # First 20 are accepted (200)
+    for i in range(20):
+        assert responses[i].status_code == 200, f"Attempt {i+1} got {responses[i].status_code}"
+
+    # 21st and 22nd receive 429
+    assert responses[20].status_code == 429
+    assert responses[21].status_code == 429
+    assert "Rate limit exceeded" in responses[20].json().get("detail", "")

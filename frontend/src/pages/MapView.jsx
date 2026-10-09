@@ -14,8 +14,9 @@ import {
   updateRoom,
   updateEquipment,
   updateTicket,
-  BASE_URL,
-  getErrorMessage
+  getWorkOrders,
+  getErrorMessage,
+  BASE_URL
 } from '../api';
 import { updateCachedFloorplanItem } from '../cacheUtils';
 
@@ -65,9 +66,8 @@ import { MapHeader } from '../components/MapHeader';
 import { LeftDrawer } from '../components/LeftDrawer';
 import { RightDrawer } from '../components/RightDrawer';
 import { MapCanvas } from '../components/MapCanvas';
-
-
-import CalibrationControlPanel from '../components/CalibrationControlPanel';
+import WorkOrderDetailModal from '../components/WorkOrderDetailModal';
+import WorkOrderCreateModal from '../components/WorkOrderCreateModal';
 
 export default function MapView() {
   const { floorplanId } = useParams();
@@ -82,6 +82,11 @@ export default function MapView() {
 
   const highlightType = searchParams.get('highlightType');
   const highlightId = searchParams.get('highlightId') ? parseInt(searchParams.get('highlightId')) : null;
+
+  // Work Orders on Map
+  const [floorplanWorkOrders, setFloorplanWorkOrders] = useState([]);
+  const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
+  const [isCreateWorkOrderOpen, setIsCreateWorkOrderOpen] = useState(false);
 
   // Drawer open/close states
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false);
@@ -98,9 +103,6 @@ export default function MapView() {
     }
   });
   const [uncalibratedWarning, setUncalibratedWarning] = useState(null);
-
-
-
 
 
   useEffect(() => {
@@ -123,6 +125,7 @@ export default function MapView() {
   const [highlightedPin, setHighlightedPin] = useState(null);
   const [isPendingSync, setIsPendingSync] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const workOrderRequestRef = useRef(0);
 
   useEffect(() => {
     setPdfLoaded(false);
@@ -181,9 +184,45 @@ export default function MapView() {
     setPendingRooms,
     dataLoaded,
     isRefreshing,
-    loadError,
     loadMapData
   } = useMapData(floorplanId, activeActionType, setPdfLoaded, location.state?.preloadedFloorplan);
+
+  // Load Work Orders for this floorplan (only open work orders)
+  const loadFloorplanWorkOrders = useCallback(async () => {
+    if (!floorplanId) return;
+    const requestId = ++workOrderRequestRef.current;
+    try {
+      const res = await getWorkOrders({ floorplan_id: floorplanId, status: 'open' });
+      if (requestId !== workOrderRequestRef.current) return;
+      setFloorplanWorkOrders(res.data?.data || []);
+    } catch (err) {
+      console.error("Failed to load floorplan work orders:", err);
+    }
+  }, [floorplanId]);
+
+  useEffect(() => {
+    // Work orders are floorplan-scoped too; clear them at the same time as
+    // the asset pins so a route transition cannot briefly show old badges.
+    setFloorplanWorkOrders([]);
+    loadFloorplanWorkOrders();
+  }, [loadFloorplanWorkOrders]);
+
+  const handlePinWorkOrderClick = useCallback((wo) => {
+    setSelectedWorkOrder(wo);
+  }, []);
+
+  const handleWorkOrderUpdated = useCallback((updatedWo, deletedId) => {
+    loadFloorplanWorkOrders();
+    if (deletedId && selectedWorkOrder?.id === deletedId) {
+      setSelectedWorkOrder(null);
+    } else if (updatedWo && selectedWorkOrder?.id === updatedWo.id) {
+      setSelectedWorkOrder(updatedWo);
+    }
+  }, [loadFloorplanWorkOrders, selectedWorkOrder]);
+
+  const handleWorkOrderCreated = useCallback(() => {
+    loadFloorplanWorkOrders();
+  }, [loadFloorplanWorkOrders]);
 
   // 3. Search logic hook
   const {
@@ -223,8 +262,7 @@ export default function MapView() {
     handleEnterCalibration,
     handleBaseFloorplanChange,
     handleSaveCalibration,
-    handleExitCalibration,
-    loadInitialTransform
+    handleExitCalibration
   } = useCalibration({
     floorplan,
     siteFloorplans,
@@ -235,7 +273,6 @@ export default function MapView() {
     onEnterCalibration: () => {
       setModeView();
       setIsRightDrawerOpen(false);
-      setIsLeftDrawerOpen(false);
     }
   });
 
@@ -359,7 +396,7 @@ export default function MapView() {
           }
         } else if (editingTicket) {
           e.preventDefault();
-          if (window.confirm(`Are you sure you want to delete issue "${editingTicket.title}"?`)) {
+          if (window.confirm(`Are you sure you want to delete ticket "${editingTicket.title}"?`)) {
             try {
               await deleteTicket(editingTicket.id);
               setTickets(prev => prev.filter(t => t.id !== editingTicket.id));
@@ -424,9 +461,12 @@ export default function MapView() {
     } else if (highlightType === 'ticket') {
       const t = tickets.find(ticket => ticket.id === highlightId);
       if (t) return { ...t, type: 'ticket', floorplan_id: parseInt(floorplanId, 10) };
+    } else if (highlightType === 'workOrder') {
+      const wo = floorplanWorkOrders.find(w => w.id === highlightId);
+      if (wo) return { ...wo, type: 'workOrder', floorplan_id: parseInt(floorplanId, 10) };
     }
     return null;
-  }, [highlightType, highlightId, dataLoaded, rooms, equipment, tickets, floorplanId]);
+  }, [highlightType, highlightId, dataLoaded, rooms, equipment, tickets, floorplanWorkOrders, floorplanId]);
 
   const effectiveTargetResult = location.state?.targetResult || targetResultFromUrl;
 
@@ -586,6 +626,7 @@ export default function MapView() {
   const handleFloorplanSwitch = (targetFp) => {
     floorplanLogger.startSwitch(targetFp.id, targetFp.name, 'Left Drawer Floorplan Switcher');
     setSwitchingToFloorplan(targetFp);
+    setPdfLoaded(false);
     if (isRelocating) {
       const itemName = editingRoom ? `room "${editingRoom.name}"` : `equipment "${editingEquipment?.name}"`;
       if (!window.confirm(`You are currently relocating ${itemName}. Do you want to move it to ${targetFp.name}?`)) {
@@ -1008,7 +1049,7 @@ export default function MapView() {
   const handleDeleteTicketAction = async (id) => {
     if (!user) return;
     const ticket = tickets.find(t => t.id === id);
-    if (window.confirm(`Are you sure you want to delete issue "${ticket?.title || 'this issue'}"?`)) {
+    if (window.confirm(`Are you sure you want to delete ticket "${ticket?.title || 'this issue'}"?`)) {
       try {
         await deleteTicket(id);
         setTickets(prev => prev.filter(t => t.id !== id));
@@ -1092,23 +1133,14 @@ export default function MapView() {
   }, [isMobile, showSearchResultsList, isRelocating, editMode, setModeEdit]);
 
   const isMapReady = Boolean(dataLoaded && pdfLoaded && floorplan && floorplan.id.toString() === floorplanId && (!switchingToFloorplan || switchingToFloorplan.id.toString() === floorplanId));
-  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
 
   useEffect(() => {
-    if (isMapReady || (loadError && !floorplan)) {
-      if (switchingToFloorplan) {
-        setSwitchingToFloorplan(null);
-      }
-      setShowLoadingOverlay(false);
-    } else {
-      // Debounce loading overlay by 250ms so instant/cached floorplan switches do not flicker
-      const timer = setTimeout(() => {
-        setShowLoadingOverlay(true);
-      }, 250);
-      return () => clearTimeout(timer);
+    if (isMapReady && switchingToFloorplan) {
+      setSwitchingToFloorplan(null);
     }
-  }, [isMapReady, switchingToFloorplan, loadError, floorplan]);
+  }, [isMapReady, switchingToFloorplan]);
 
+  const isMapLoading = !isMapReady;
   const currentLoadingName = switchingToFloorplan?.name || floorplan?.name;
   const currentLoadingType = switchingToFloorplan?.file_type || floorplan?.file_type;
 
@@ -1172,7 +1204,7 @@ export default function MapView() {
       </button>
 
       {/* Main Map Content Loader overlay */}
-      {showLoadingOverlay && (
+      {isMapLoading && (
         <div className="map-loading-overlay flex-column items-center gap-md">
           <Loader2 className="spinning" size={42} color="var(--primary-color)" />
           <p className="font-semibold text-xl text-white">
@@ -1181,31 +1213,6 @@ export default function MapView() {
           <span className="text-sm text-slate-400">
             {currentLoadingType === 'pdf' ? 'Rendering blueprint canvas...' : 'Loading map data & pins...'}
           </span>
-        </div>
-      )}
-
-      {/* Floorplan Load Error Overlay */}
-      {loadError && !floorplan && (
-        <div className="map-loading-overlay flex-column items-center justify-center p-lg">
-          <div className="card glass-panel flex-column items-center text-center gap-md max-w-460 p-xl">
-            <AlertTriangle size={48} color="var(--danger-color, #ef4444)" />
-            <h2 className="text-xl font-bold text-white">Unable to Load Floorplan</h2>
-            <p className="text-secondary text-sm">{loadError}</p>
-            <div className="flex items-center gap-sm mt-sm">
-              <button
-                className="btn btn-secondary"
-                onClick={() => navigate('/')}
-              >
-                Back to Dashboard
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => loadMapData(true)}
-              >
-                Retry
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -1258,20 +1265,53 @@ export default function MapView() {
 
       {/* Visual Calibration Control Panel */}
       {calibrationMode && (
-        <CalibrationControlPanel
-          floorplan={floorplan}
-          floorplanId={floorplanId}
-          siteFloorplans={siteFloorplans}
-          baseFloorplanId={baseFloorplanId}
-          onBaseFloorplanChange={handleBaseFloorplanChange}
-          overlayOpacity={overlayOpacity}
-          setOverlayOpacity={setOverlayOpacity}
-          overlayTransform={overlayTransform}
-          setOverlayTransform={setOverlayTransform}
-          onSave={handleSaveCalibration}
-          onCancel={handleExitCalibration}
-          onReset={() => loadInitialTransform(baseFloorplanId)}
-        />
+        <div className="placement-banner calibration-banner flex-column items-start gap-xs w-90 max-w-800" style={{ bottom: '1rem' }}>
+          <div className="items-center w-full gap-md">
+            <div className="items-center gap-sm font-bold">
+              <MapPin size={18} />
+              <span>Visual Alignment</span>
+            </div>
+
+            <div className="items-center gap-sm" style={{ marginLeft: 'auto' }}>
+              <button className="btn" style={{ background: '#0f172a', color: '#f59e0b', padding: '0.2rem 0.75rem' }} onClick={handleSaveCalibration}>
+                Save Alignment
+              </button>
+              <button className="btn btn-secondary btn-xs" style={{ padding: '0.2rem 0.75rem' }} onClick={handleExitCalibration}>
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-row flex-wrap gap-md w-full items-center bg-subtle p-sm rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
+            <div className="items-center gap-sm">
+              <label className="text-xs font-semibold">Base Floorplan:</label>
+              <select className="input-field btn-xs" value={baseFloorplanId} onChange={handleBaseFloorplanChange} style={{ width: '150px' }}>
+                {siteFloorplans.map(fp => (
+                  <option key={fp.id} value={fp.id} disabled={fp.id === parseInt(floorplanId, 10)}>{fp.name} {fp.id === parseInt(floorplanId, 10) ? '(Current)' : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="items-center gap-sm">
+              <label className="text-xs font-semibold">Opacity:</label>
+              <input type="range" min="0.1" max="1" step="0.1" value={overlayOpacity} onChange={e => setOverlayOpacity(parseFloat(e.target.value))} style={{ width: '80px' }} />
+            </div>
+
+            <div className="items-center gap-sm">
+              <label className="text-xs font-semibold">Scale:</label>
+              <input type="number" step="0.01" value={overlayTransform.scale} onChange={e => setOverlayTransform(prev => ({ ...prev, scale: parseFloat(e.target.value) || 1 }))} className="input-field btn-xs" style={{ width: '80px' }} />
+            </div>
+
+            <div className="items-center gap-sm">
+              <label className="text-xs font-semibold">Rot (°):</label>
+              <input type="number" step="0.5" value={overlayTransform.rotation} onChange={e => setOverlayTransform(prev => ({ ...prev, rotation: parseFloat(e.target.value) || 0 }))} className="input-field btn-xs" style={{ width: '70px' }} />
+            </div>
+
+            <div className="text-xs font-bold" style={{ color: 'rgba(15,23,42,0.6)', marginLeft: 'auto' }}>
+              Drag the overlay to adjust offset
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Left Drawer (Navigation, switcher list) */}
@@ -1328,15 +1368,13 @@ export default function MapView() {
         onAddRoom={handleAddRoomSubmit}
         onAddEquipment={handleAddEquipmentSubmit}
         onAddTicket={handleAddTicketSubmit}
+        onOpenCreateWorkOrder={() => setIsCreateWorkOrderOpen(true)}
         onUpdateRoom={handleUpdateRoomSubmit}
         onUpdateEquipment={handleUpdateEquipmentSubmit}
         onUpdateTicket={handleUpdateTicketSubmit}
         onDeleteRoom={handleDeleteRoomAction}
         onDeleteEquipment={handleDeleteEquipmentAction}
         onDeleteTicket={handleDeleteTicketAction}
-
-
-
         navigate={navigate}
         location={location}
       />
@@ -1358,9 +1396,12 @@ export default function MapView() {
         overlayDragRef={overlayDragRef}
         setPdfLoaded={setPdfLoaded}
         filteredRooms={filteredRooms}
+        allRooms={rooms}
         pendingRooms={pendingRooms}
         dispersedEquipment={dispersedEquipment}
+        allEquipment={equipment}
         tickets={tickets}
+        workOrders={floorplanWorkOrders}
         multiFloorRefPin={activeMultiFloorRefPin}
         highlightedPin={highlightedPin}
         equipColor={equipColor}
@@ -1369,14 +1410,32 @@ export default function MapView() {
         onPinRoomClick={handlePinRoomClick}
         onPinEquipClick={handlePinEquipClick}
         onPinTicketClick={handlePinTicketClick}
+        onPinWorkOrderClick={handlePinWorkOrderClick}
         onPinMultiFloorRefClick={handlePinMultiFloorRefClick}
       />
 
+      {/* Work Order Detail Modal */}
+      {selectedWorkOrder && (
+        <WorkOrderDetailModal
+          isOpen={Boolean(selectedWorkOrder)}
+          workOrder={selectedWorkOrder}
+          onClose={() => setSelectedWorkOrder(null)}
+          onUpdated={handleWorkOrderUpdated}
+          currentUser={user}
+        />
+      )}
 
-
-
-
-
+      {/* Work Order Create Modal */}
+      {isCreateWorkOrderOpen && (
+        <WorkOrderCreateModal
+          isOpen={isCreateWorkOrderOpen}
+          onClose={() => setIsCreateWorkOrderOpen(false)}
+          onCreated={handleWorkOrderCreated}
+          initialSiteId={floorplan?.site_id}
+          initialFloorplanId={floorplan?.id}
+          currentUser={user}
+        />
+      )}
     </div>
   );
 }

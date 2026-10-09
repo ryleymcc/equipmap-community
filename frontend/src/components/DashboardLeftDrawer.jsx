@@ -1,11 +1,20 @@
 /* global __BUILD_TIME__, __APP_VERSION__ */
+import { useState, useEffect } from 'react';
 import {
-  Package,  Building, X, LayoutDashboard, DoorOpen, AlertCircle, History as HistoryIcon, Users, LogOut, LogIn, User as UserIcon,
-  Cloud, CloudOff, RefreshCw
+  Building, X, LayoutDashboard, Package, DoorOpen, AlertCircle, ClipboardList,
+  History as HistoryIcon, Users, Shuffle, LogOut, LogIn, User as UserIcon,
+  Cloud, CloudOff, RefreshCw, Bell, BellRing, BellOff, BookOpen
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useOffline } from '../OfflineContext';
+import {
+  isPushNotificationSupported,
+  getNotificationPermission,
+  subscribeUserToPush,
+  unsubscribeUserFromPush
+} from '../pushNotifications';
+import { NotificationBlockedModal } from './NotificationBlockedModal';
 
 export default function DashboardLeftDrawer({
   isOpen,
@@ -36,7 +45,35 @@ export default function DashboardLeftDrawer({
     hash: location?.hash || ''
   };
 
+  const [notifPermission, setNotifPermission] = useState(getNotificationPermission());
+  const [isSubscribingNotif, setIsSubscribingNotif] = useState(false);
+  const [isBlockedModalOpen, setIsBlockedModalOpen] = useState(false);
 
+  useEffect(() => {
+    const updatePermission = () => setNotifPermission(getNotificationPermission());
+    window.addEventListener('focus', updatePermission);
+    return () => window.removeEventListener('focus', updatePermission);
+  }, [user]);
+
+  const handleToggleNotifications = async () => {
+    if (!user?.id) return;
+    setIsSubscribingNotif(true);
+    try {
+      if (notifPermission === 'granted') {
+        await unsubscribeUserFromPush(user.id);
+        setNotifPermission('default');
+      } else {
+        const res = await subscribeUserToPush(user.id);
+        if (res.success) {
+          setNotifPermission('granted');
+        } else if (res.reason === 'permission_denied') {
+          setNotifPermission('denied');
+        }
+      }
+    } finally {
+      setIsSubscribingNotif(false);
+    }
+  };
 
   const onNav = (view) => {
     if (view === 'audit-log' || view === 'audit-history') {
@@ -53,6 +90,20 @@ export default function DashboardLeftDrawer({
       }
       return;
     }
+    if (view === 'tasks') {
+      if (onClose) onClose();
+      if (activeView !== 'tasks') {
+        navigate('/tasks', { state: { from: currentPathObj } });
+      }
+      return;
+    }
+    if (view === 'remapper') {
+      if (onClose) onClose();
+      if (activeView !== 'remapper') {
+        navigate('/remapper', { state: { from: currentPathObj } });
+      }
+      return;
+    }
 
     if (handleNavClick) {
       handleNavClick(view);
@@ -66,7 +117,9 @@ export default function DashboardLeftDrawer({
     } else if (view === 'rooms') {
       navigate('/rooms');
     } else if (view === 'tickets') {
-      navigate('/issues');
+      navigate('/tickets');
+    } else if (view === 'workorders') {
+      navigate('/work-orders');
     }
   };
 
@@ -96,7 +149,15 @@ export default function DashboardLeftDrawer({
 
         <nav className="drawer-nav">
 
-
+          {(
+            <button
+              className={`drawer-nav-item ${activeView === 'workorders' ? 'active' : ''}`}
+              onClick={() => onNav('workorders')}
+            >
+              <ClipboardList size={20} className="nav-icon" />
+              <span>Work Orders</span>
+            </button>
+          )}
 
           <button
             className={`drawer-nav-item ${activeView === 'floorplans' ? 'active' : ''}`}
@@ -127,7 +188,7 @@ export default function DashboardLeftDrawer({
             onClick={() => onNav('tickets')}
           >
             <AlertCircle size={20} className="nav-icon" />
-            <span>Issues</span>
+            <span>Issue Tickets</span>
           </button>
 
           <button
@@ -138,6 +199,15 @@ export default function DashboardLeftDrawer({
             <span>Audit History</span>
           </button>
 
+          {(isAdmin || auth?.canCreatePM || user?.can_create_pm) && (
+            <button
+              className={`drawer-nav-item ${activeView === 'tasks' ? 'active' : ''}`}
+              onClick={() => onNav('tasks')}
+            >
+              <BookOpen size={20} className="nav-icon" />
+              <span>Task Templates</span>
+            </button>
+          )}
 
           {isAdmin && (
             <button
@@ -149,10 +219,72 @@ export default function DashboardLeftDrawer({
             </button>
           )}
 
+          <div className="drawer-divider" />
+
+          <button
+            className={`drawer-nav-item ${activeView === 'remapper' ? 'active' : ''}`}
+            onClick={() => onNav('remapper')}
+          >
+            <Shuffle size={20} className="nav-icon" />
+            <span>Remapper</span>
+          </button>
         </nav>
 
         <div className="drawer-footer drawer-footer-bottom">
+          {/* Push Notifications Toggle */}
+          {user && isPushNotificationSupported() && (
+            <div className="drawer-notif-box">
+              <div className="flex-between items-center gap-sm">
+                <div className="items-center gap-sm overflow-hidden">
+                  {notifPermission === 'granted' ? (
+                    <BellRing size={14} color="#10b981" />
+                  ) : notifPermission === 'denied' ? (
+                    <BellOff size={14} color="#ef4444" />
+                  ) : (
+                    <Bell size={14} color="var(--text-secondary)" />
+                  )}
+                  <span className="text-xs font-semibold text-primary text-truncate">
+                    {notifPermission === 'granted'
+                      ? 'Push notifications active'
+                      : notifPermission === 'denied'
+                      ? 'Notifications blocked'
+                      : 'Push notifications'}
+                  </span>
+                </div>
+                {notifPermission === 'denied' ? (
+                  <button
+                    onClick={() => setIsBlockedModalOpen(true)}
+                    className="btn btn-primary"
+                    style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem', background: '#ef4444' }}
+                    title="Notifications blocked in browser. Click for instructions to unblock."
+                  >
+                    Unblock
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleToggleNotifications}
+                    disabled={isSubscribingNotif}
+                    className={`btn ${notifPermission === 'granted' ? 'btn-secondary' : 'btn-primary'}`}
+                    style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                    title={notifPermission === 'granted' ? 'Disable push notifications' : 'Enable push notifications for assigned work orders'}
+                  >
+                    {isSubscribingNotif
+                      ? '...'
+                      : notifPermission === 'granted'
+                      ? 'Disable'
+                      : 'Enable'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
+          <NotificationBlockedModal
+            isOpen={isBlockedModalOpen}
+            onClose={() => setIsBlockedModalOpen(false)}
+            userId={user?.id}
+            onPermissionChanged={(newPerm) => setNotifPermission(newPerm)}
+          />
 
           {/* Offline Sync Status */}
           <div className="drawer-sync-box">

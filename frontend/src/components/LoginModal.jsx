@@ -51,7 +51,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }) {
       if (isTech) {
         localStorage.setItem('wo_filter_tech', loggedInUser.username);
         localStorage.setItem('wo_filter_status', 'open');
-      } else if (isAdm) {
+      } else if (isAdm || loggedInUser.can_triage) {
         localStorage.setItem('wo_filter_tech', 'Unassigned');
         localStorage.setItem('wo_filter_status', 'all');
       }

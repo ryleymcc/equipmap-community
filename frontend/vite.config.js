@@ -44,6 +44,7 @@ export default defineConfig({
       },
       manifest: false, // use existing manifest.json in public folder
       workbox: {
+        importScripts: ['/sw-push.js'],
         navigateFallback: 'index.html',
         // OAuth browser redirects and MCP discovery must always reach the server.
         navigateFallbackDenylist: [/^\/api\//, /^\/mcp(?:\/|$)/, /^\/\.well-known\//],
@@ -54,10 +55,25 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 20000000, // 20MB to cover large chunks/models
         runtimeCaching: [
           {
+            // Wait for live work-order data; use cache only on network failure.
+            // A short timeout can bring deleted orders back from stale cache.
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/work-orders'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              expiration: {
+                maxEntries: 500,
+                maxAgeSeconds: 60 * 60 * 24 * 30
+              },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          {
             // API calls for entity data: NetworkFirst with short timeout.
-            // Exclude uploads, TMA proxy, auth/tokens, users/me, and sync checks so session state is always fresh.
+            // Exclude uploads, auth/tokens, users/me, and sync checks so session state is always fresh.
             urlPattern: ({ url }) =>
               url.pathname.startsWith('/api/') &&
+              !url.pathname.startsWith('/api/work-orders') &&
               !url.pathname.startsWith('/api/uploads/') &&
 
               !url.pathname.startsWith('/api/users/me') &&
@@ -66,6 +82,7 @@ export default defineConfig({
               !url.pathname.startsWith('/api/auth/') &&
               !url.pathname.includes('/room-scan') &&
               !url.pathname.startsWith('/api/chatgpt/') &&
+              !url.pathname.startsWith('/api/notifications/') &&
               !url.pathname.startsWith('/api/sync/'),
             handler: 'NetworkFirst',
             options: {

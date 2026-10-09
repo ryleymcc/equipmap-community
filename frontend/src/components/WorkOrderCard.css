@@ -1,0 +1,419 @@
+.wo-mobile-card {
+  padding: var(--space-4);
+  gap: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.wo-mobile-card:hover,
+.wo-mobile-card:focus-visible {
+  background: var(--surface-card);
+  border-color: var(--surface-border-hover);
+}
+
+.wo-mobile-card:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.wo-mobile-card.row-selected {
+  background: var(--primary-subtle);
+  border-color: var(--primary-border);
+}
+
+.wo-card-header,
+.wo-card-identity,
+.wo-card-state,
+.wo-card-supporting,
+.wo-card-meta,
+.wo-card-actions,
+.wo-card-location-links {
+  display: flex;
+  align-items: center;
+}
+
+.wo-card-header {
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.wo-card-identity,
+.wo-card-state,
+.wo-card-supporting,
+.wo-card-location-links {
+  gap: var(--space-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.wo-card-checkbox {
+  width: 18px;
+  height: 18px;
+  margin: 0 var(--space-1) 0 0;
+  accent-color: var(--primary-color);
+}
+
+.wo-card-number {
+  color: var(--primary-color);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-bold);
+}
+
+.wo-card-icon-btn {
+  display: inline-flex;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.wo-card-icon-btn:hover,
+.wo-card-icon-btn:focus-visible {
+  background: var(--primary-subtle);
+  color: var(--text-primary);
+}
+
+.wo-card-icon-btn.is-success {
+  color: var(--success-color);
+}
+
+.wo-card-priority,
+.wo-card-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+.wo-card-priority.priority-urgent,
+.wo-card-priority.priority-high,
+.wo-card-status.status-rejected {
+  background: var(--danger-subtle);
+  border-color: var(--danger-border);
+  color: var(--danger-color);
+}
+
+.wo-card-priority.priority-medium,
+.wo-card-status.status-pending_triage,
+.wo-card-status.status-unassigned {
+  background: var(--warning-subtle);
+  border-color: var(--warning-border);
+  color: var(--warning-color);
+}
+
+.wo-card-priority.priority-low,
+.wo-card-status.status-assigned,
+.wo-card-status.status-in_progress {
+  background: var(--primary-subtle);
+  border-color: var(--primary-border);
+  color: var(--primary-color);
+}
+
+.wo-card-status.status-completed {
+  background: var(--success-subtle);
+  border-color: var(--success-border);
+  color: var(--success-color);
+}
+
+.wo-card-status.status-on_hold,
+.wo-card-status.status-cancelled,
+.wo-card-status.status-unknown {
+  background: var(--surface-card);
+  color: var(--text-secondary);
+}
+
+.wo-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wo-card-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-card-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.wo-card-supporting {
+  color: var(--text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.wo-card-supporting > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.wo-card-supporting > span + span::before {
+  content: '•';
+  margin-right: var(--space-2);
+  color: var(--text-muted);
+}
+
+.wo-card-task-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--surface-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.wo-card-task-fields > div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.wo-card-task-fields span {
+  color: var(--text-muted);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.wo-card-task-fields strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  overflow-wrap: anywhere;
+}
+
+.wo-card-location {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--surface-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.wo-card-location-main {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wo-card-location-main > svg {
+  flex-shrink: 0;
+  color: var(--primary-color);
+}
+
+.wo-card-location-main > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.wo-card-location-main strong,
+.wo-card-location-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wo-card-location-main strong {
+  font-size: var(--font-size-label);
+}
+
+.wo-card-location-main small {
+  color: var(--text-secondary);
+  font-size: var(--font-size-meta);
+}
+
+.wo-card-location-main:disabled,
+.wo-card-location-links button:disabled {
+  cursor: default;
+}
+
+.wo-card-location-links button {
+  display: inline-flex;
+  min-height: var(--control-height-sm);
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-full);
+  background: var(--primary-subtle);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-meta);
+  cursor: pointer;
+}
+
+.wo-card-location-links .wo-card-equipment-toggle {
+  display: none;
+}
+
+.wo-card-equipment-row,
+.wo-card-equipment-links {
+  display: contents;
+}
+
+.wo-card-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--surface-border-subtle);
+}
+
+.wo-card-meta {
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.wo-card-meta > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.wo-card-meta > span > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wo-card-meta .is-warning {
+  color: var(--warning-color);
+}
+
+.wo-card-meta .is-danger {
+  color: var(--danger-color);
+  font-weight: var(--font-weight-semibold);
+}
+
+.wo-card-actions {
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+.wo-card-action-btn {
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-4);
+}
+
+@media (max-width: 520px) {
+  .wo-card-header,
+  .wo-card-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wo-card-state {
+    justify-content: flex-start;
+  }
+
+  .wo-card-actions {
+    width: 100%;
+  }
+
+  .wo-mobile-card .wo-card-action-btn {
+    min-height: var(--control-height-lg);
+    flex: 1;
+  }
+
+  .wo-card-icon-btn {
+    width: var(--control-height-lg);
+    height: var(--control-height-lg);
+  }
+
+  .wo-card-checkbox {
+    width: 20px;
+    height: 20px;
+  }
+
+  .wo-card-location-links button {
+    min-height: var(--control-height-lg);
+  }
+
+}
+
+@media (max-width: 860px) {
+  .wo-card-equipment-row {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .wo-card-equipment-links {
+    min-width: 0;
+    max-height: none;
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    overflow: hidden;
+  }
+
+  .wo-card-equipment-links:not(.is-expanded) {
+    max-height: var(--control-height-sm);
+  }
+
+  .wo-card-location-links .wo-card-equipment-toggle {
+    display: inline-flex;
+    flex: 0 0 auto;
+    border-color: var(--surface-border);
+    background: transparent;
+    color: var(--primary-color);
+  }
+
+  .wo-card-location-links .wo-card-equipment-toggle.is-measuring {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .wo-card-equipment-links:not(.is-expanded) {
+    max-height: var(--control-height-lg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wo-mobile-card,
+  .wo-card-icon-btn {
+    transition: none;
+  }
+}

@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import {
-  Package,  Map as MapIcon, Building,
+  Package, Map as MapIcon, Building,
   Check, X, Pencil, ExternalLink, Trash2,
-  ChevronUp, ChevronDown, RefreshCw,
+  ChevronUp, ChevronDown, ClipboardList, Calendar, RefreshCw,
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { COLORS } from '../mapConstants';
@@ -28,14 +28,17 @@ export default function EquipmentTable({
   selectedEquipIds,
   toggleEquipSelection,
   selectAllFilteredEquip,
-  setIsBulkEditModalOpen
+  setIsBulkEditModalOpen,
+  onViewWorkOrders,
+  onOpenPMSchedules
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [prevFilteredLength, setPrevFilteredLength] = useState(filteredEquipment.length);
 
-  const [previousCount, setPreviousCount] = useState(filteredEquipment.length);
-  if (previousCount !== filteredEquipment.length) {
-    setPreviousCount(filteredEquipment.length);
+  // Reset to page 1 when filtered items change
+  if (prevFilteredLength !== filteredEquipment.length) {
+    setPrevFilteredLength(filteredEquipment.length);
     setCurrentPage(1);
   }
 
@@ -271,7 +274,20 @@ export default function EquipmentTable({
                                   <Pencil size={16} />
                                 </button>
                               )}
-
+                              <button
+                                className="row-action-btn text-accent-light"
+                                title="View Work Orders"
+                                onClick={() => onViewWorkOrders && onViewWorkOrders(equip, 'equipment')}
+                              >
+                                <ClipboardList size={16} />
+                              </button>
+                              <button
+                                className="row-action-btn text-accent-light"
+                                title="View PM Schedules"
+                                onClick={() => onOpenPMSchedules && onOpenPMSchedules(equip, 'equipment')}
+                              >
+                                <Calendar size={16} />
+                              </button>
                               <button className="row-action-btn map-btn" title="Go to Map" onClick={() => goToMap(equip)}>
                                 <ExternalLink size={16} />
                               </button>
@@ -359,7 +375,8 @@ export default function EquipmentTable({
               goToMap={goToMap}
               selectedEquipIds={selectedEquipIds}
               toggleEquipSelection={toggleEquipSelection}
-
+              onViewWorkOrders={onViewWorkOrders}
+              onOpenPMSchedules={onOpenPMSchedules}
             />
           ))
         )}
@@ -367,7 +384,7 @@ export default function EquipmentTable({
 
       {/* Pagination Footer */}
       {filteredEquipment.length > 0 && (
-        <div className="list-pagination-panel glass-panel flex-between p-md mt-md flex-wrap gap-md">
+        <div className="wo-pagination-panel glass-panel flex-between p-md mt-md flex-wrap gap-md">
           {/* Info & Page Size */}
           <div className="items-center gap-lg">
             <span className="text-sm text-muted">
@@ -377,7 +394,7 @@ export default function EquipmentTable({
             <div className="items-center gap-xs">
               <span className="text-xs text-muted">Per page:</span>
               <select
-                className="input-field list-pagesize-control" aria-label="Items per page"
+                className="wo-pagesize-select"
                 value={pageSize}
                 onChange={e => {
                   const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
@@ -398,7 +415,7 @@ export default function EquipmentTable({
           {pageSize !== 'all' && totalPages > 1 && (
             <div className="items-center gap-xs">
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(1)}
                 disabled={validCurrentPage === 1}
                 title="First Page"
@@ -407,7 +424,7 @@ export default function EquipmentTable({
               </button>
 
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={validCurrentPage === 1}
                 title="Previous Page"
@@ -420,7 +437,7 @@ export default function EquipmentTable({
               </span>
 
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={validCurrentPage === totalPages}
                 title="Next Page"
@@ -429,7 +446,7 @@ export default function EquipmentTable({
               </button>
 
               <button
-                className="btn btn-secondary list-page-btn"
+                className="wo-page-btn"
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={validCurrentPage === totalPages}
                 title="Last Page"

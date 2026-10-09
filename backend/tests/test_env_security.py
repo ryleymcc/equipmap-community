@@ -33,7 +33,7 @@ def test_production_fails_when_secret_key_is_default(monkeypatch):
 
 def test_production_fails_when_secret_key_too_short(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("SECRET_KEY", "too-short")
+    monkeypatch.setenv("SECRET_KEY", "short")
     monkeypatch.setattr(config, "IS_PRODUCTION", True)
 
     with pytest.raises(RuntimeError, match="must be at least 32 characters long"):
@@ -146,4 +146,3 @@ if __name__ == "__main__":
         finally:
             mp.undo()
     print("\nAll 9 environment security checks passed successfully!")
-
