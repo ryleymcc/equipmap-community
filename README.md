@@ -20,13 +20,6 @@ See the [CMMS setup and workflow guide](docs/CMMS.md).
 The frontend uses React, Vite, and a PWA service worker. The API uses FastAPI,
 SQLAlchemy, and PostgreSQL. PDF processing and OCR use PyMuPDF and Tesseract.
 
-## See EquipMap in action
-
-Screenshots from [equipmap.api1.ca](https://equipmap.api1.ca), captured October 6,
-2026. They show the hosted application's floorplan and equipment search workflows.
-The hosted deployment may differ from this release; TMA is excluded from Community.
-The pictured facility records and floorplans are not included in this repository.
-
 ### Native work orders
 
 The CMMS edition manages requests, assignments, labor, completion, and recurring
