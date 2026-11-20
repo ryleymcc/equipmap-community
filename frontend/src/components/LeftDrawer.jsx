@@ -26,7 +26,8 @@ export const LeftDrawer = memo(function LeftDrawer({
     '/equipment': 'Equipment',
     '/rooms': 'Rooms',
     '/issues': 'Issues',
-    '/tickets': 'Issues'
+    '/tickets': 'Issues',
+    '/floorplans': 'Floorplans'
   };
   const backLabel = backLabels[returnTo?.pathname] || 'Dashboard';
   const { isSyncing, lastSyncTime, syncData } = useOffline();

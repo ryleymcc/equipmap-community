@@ -1,0 +1,10 @@
+.table-pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-4); padding: var(--space-5); margin-top: var(--space-4); }
+.table-pagination-info, .table-pagination-size, .table-pagination-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.table-pagination-info { gap: var(--space-6); }
+.table-pagination-size label, .table-pagination-controls { font-size: var(--font-size-label); color: var(--text-secondary); }
+.table-pagination :is(button, select):focus-visible { outline: var(--space-1) solid var(--primary-border); }
+.table-column-sort { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: var(--control-height-md); padding: 0; border: 0; background: none; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; text-align: left; }
+.table-column-sort svg { flex-shrink: 0; }
+.table-column-sort:disabled { cursor: default; }
+.table-column-sort:focus-visible { outline: var(--space-1) solid var(--primary-border); border-radius: var(--radius-sm); }
+@media (max-width: 700px) { .table-column-sort { min-height: var(--control-height-lg); } }

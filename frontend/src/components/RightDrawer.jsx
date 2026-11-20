@@ -307,8 +307,7 @@ export const RightDrawer = memo(function RightDrawer({
 
               <div className="input-group">
                 <label>Description (Optional)</label>
-                <input
-                  type="text"
+                <textarea aria-label="Description" rows={3}
                   className="input-field"
                   value={nextDescription}
                   onChange={(e) => setNextDescription(e.target.value)}
@@ -322,8 +321,7 @@ export const RightDrawer = memo(function RightDrawer({
             <>
               <div className="input-group">
                 <label>Tools Required (Optional)</label>
-                <input
-                  type="text"
+                <textarea aria-label="Tools required" rows={3}
                   className="input-field"
                   value={nextToolsRequired}
                   onChange={(e) => setNextToolsRequired(e.target.value)}

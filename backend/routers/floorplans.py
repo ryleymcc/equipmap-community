@@ -1,7 +1,7 @@
-import os
 import shutil
 import json
-import time
+from pathlib import Path
+from uuid import uuid4
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Response
 from fastapi.encoders import jsonable_encoder
@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 import models
 import schemas
-from svg_parser import parse_svg_for_rooms
+from starlette.concurrency import run_in_threadpool
+from svg_parser import parse_svg_for_rooms, validate_svg
 from utils import (
     require_editor, log_action, check_etag_match, respond_304,
     get_floorplan_db_hash, get_site_floorplans_db_hash, UPLOAD_DIR
@@ -91,6 +92,27 @@ async def sort_floorplans(
     await db.commit()
     return {"status": "success"}
 
+def store_floorplan(file: UploadFile):
+    suffix = Path(file.filename or "").suffix.lower()
+    file_types = {".pdf": "pdf", ".svg": "svg", ".glb": "glb", ".png": "image",
+                  ".jpg": "image", ".jpeg": "image", ".webp": "image", ".gif": "image"}
+    if suffix not in file_types:
+        raise HTTPException(400, "Unsupported file format. Please upload a PDF, SVG, PNG, JPG, JPEG, WEBP, GIF, or GLB file.")
+    if suffix == ".svg":
+        validate_svg(file.file)
+        file.file.seek(0)
+
+    path = Path(UPLOAD_DIR) / f"fp_{uuid4().hex}{suffix}"
+    output = path.open("xb")
+    try:
+        with output:
+            shutil.copyfileobj(file.file, output)
+    except OSError:
+        path.unlink(missing_ok=True)
+        raise
+    return path, file_types[suffix]
+
+
 @router.post("/api/floorplans", response_model=schemas.Floorplan)
 async def upload_floorplan(
     site_id: int = Form(...),
@@ -105,53 +127,22 @@ async def upload_floorplan(
     if existing_fp.scalars().first():
         raise HTTPException(status_code=400, detail="A floorplan with this name already exists for this site.")
 
-    filename_lower = file.filename.lower()
-    if filename_lower.endswith('.pdf'):
-        file_type = 'pdf'
-    elif filename_lower.endswith('.svg'):
-        file_type = 'svg'
-    elif filename_lower.endswith('.glb'):
-        file_type = 'glb'
-    elif filename_lower.endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif')):
-        file_type = 'image'
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported file format. Please upload a PDF, SVG, PNG, JPG, JPEG, WEBP, GIF, or GLB file."
-        )
-
-    file_location = os.path.join(UPLOAD_DIR, file.filename)
-    with open(file_location, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    db_floorplan = models.Floorplan(
-        site_id=site_id,
-        name=name,
-        file_path=f"/uploads/{file.filename}",
-        file_type=file_type
-    )
-    db.add(db_floorplan)
-    await db.commit()
-    await db.refresh(db_floorplan)
-
-    await log_action(db, "create", "floorplan", db_floorplan.id, db_floorplan.name, new_values={"name": name, "file_type": file_type}, message=f"Uploaded floorplan '{db_floorplan.name}'", user=current_user)
-    await db.commit()
-
-    if file_type == 'svg':
-        with open(file_location, "r", encoding="utf-8") as f:
-            svg_content = f.read()
-            rooms_data = parse_svg_for_rooms(svg_content)
-            for r in rooms_data:
-                db_room = models.Room(
-                    floorplan_id=db_floorplan.id,
-                    name=r['name'],
-                    description="",
-                    x_coordinate=r['x_coordinate'],
-                    y_coordinate=r['y_coordinate']
-                )
-                db.add(db_room)
-            if rooms_data:
-                await db.commit()
+    path, file_type = await run_in_threadpool(store_floorplan, file)
+    try:
+        db_floorplan = models.Floorplan(site_id=site_id, name=name, file_path=f"/uploads/{path.name}", file_type=file_type)
+        db.add(db_floorplan)
+        await db.flush()
+        if file_type == "svg":
+            for room in parse_svg_for_rooms(path.read_bytes()):
+                db.add(models.Room(floorplan_id=db_floorplan.id, description="", **room))
+        await log_action(db, "create", "floorplan", db_floorplan.id, name,
+                         new_values={"name": name, "file_type": file_type},
+                         message=f"Uploaded floorplan '{name}'", user=current_user)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        path.unlink(missing_ok=True)
+        raise
 
     result = await db.execute(
         select(models.Floorplan)
@@ -280,65 +271,51 @@ async def replace_floorplan_file(
             selectinload(models.Floorplan.reference_points)
         )
         .where(models.Floorplan.id == floorplan_id)
+        .with_for_update()
     )
     floorplan = result.scalars().first()
     if not floorplan:
         raise HTTPException(status_code=404, detail="Floorplan not found")
 
-    filename_lower = file.filename.lower()
-    if filename_lower.endswith('.pdf'):
-        file_type = 'pdf'
-    elif filename_lower.endswith('.svg'):
-        file_type = 'svg'
-    elif filename_lower.endswith('.glb'):
-        file_type = 'glb'
-    elif filename_lower.endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif')):
-        file_type = 'image'
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported file format. Please upload a PDF, SVG, PNG, JPG, JPEG, WEBP, GIF, or GLB file."
+    path, file_type = await run_in_threadpool(store_floorplan, file)
+    new_file_path = f"/uploads/{path.name}"
+
+    try:
+        old_values = {
+            "file_path": floorplan.file_path,
+            "file_type": floorplan.file_type,
+            "previous_file_path": floorplan.previous_file_path,
+            "equipment": [{"id": eq.id, "x": eq.x_coordinate, "y": eq.y_coordinate} for eq in floorplan.equipment],
+            "rooms": [{"id": r.id, "x": r.x_coordinate, "y": r.y_coordinate} for r in floorplan.rooms],
+            "tickets": [{"id": t.id, "x": t.x_coordinate, "y": t.y_coordinate} for t in floorplan.tickets],
+            "reference_points": [{"id": rp.id, "x": rp.x_coordinate, "y": rp.y_coordinate} for rp in floorplan.reference_points]
+        }
+        new_values = {
+            "file_path": new_file_path,
+            "file_type": file_type,
+            "previous_file_path": floorplan.file_path
+        }
+
+        floorplan.previous_file_path = floorplan.file_path
+        floorplan.file_path = new_file_path
+        floorplan.file_type = file_type
+
+        await log_action(
+            db,
+            "replace_file",
+            "floorplan",
+            floorplan.id,
+            floorplan.name,
+            old_values=old_values,
+            new_values=new_values,
+            message=f"Replaced file for floorplan '{floorplan.name}' with '{file.filename}'",
+            user=current_user
         )
-
-    base, ext = os.path.splitext(os.path.basename(file.filename))
-    safe_base = "".join(c for c in base if c.isalnum() or c in ('_', '-')).strip() or "floorplan"
-    new_filename = f"fp_{floorplan.id}_{int(time.time())}_{safe_base}{ext}"
-    file_location = os.path.join(UPLOAD_DIR, new_filename)
-
-    with open(file_location, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    old_values = {
-        "file_path": floorplan.file_path,
-        "file_type": floorplan.file_type,
-        "previous_file_path": floorplan.previous_file_path,
-        "equipment": [{"id": eq.id, "x": eq.x_coordinate, "y": eq.y_coordinate} for eq in floorplan.equipment],
-        "rooms": [{"id": r.id, "x": r.x_coordinate, "y": r.y_coordinate} for r in floorplan.rooms],
-        "tickets": [{"id": t.id, "x": t.x_coordinate, "y": t.y_coordinate} for t in floorplan.tickets],
-        "reference_points": [{"id": rp.id, "x": rp.x_coordinate, "y": rp.y_coordinate} for rp in floorplan.reference_points]
-    }
-    new_values = {
-        "file_path": f"/uploads/{new_filename}",
-        "file_type": file_type,
-        "previous_file_path": floorplan.file_path
-    }
-
-    floorplan.previous_file_path = floorplan.file_path
-    floorplan.file_path = f"/uploads/{new_filename}"
-    floorplan.file_type = file_type
-
-    await log_action(
-        db,
-        "replace_file",
-        "floorplan",
-        floorplan.id,
-        floorplan.name,
-        old_values=old_values,
-        new_values=new_values,
-        message=f"Replaced file for floorplan '{floorplan.name}' with '{file.filename}'",
-        user=current_user
-    )
-    await db.commit()
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        path.unlink(missing_ok=True)
+        raise
     await db.refresh(floorplan)
 
     _floorplan_detail_cache.pop(floorplan.id, None)
@@ -459,14 +436,20 @@ async def delete_floorplan(floorplan_id: int, db: AsyncSession = Depends(get_db)
         "site_id": floorplan.site_id,
         "name": floorplan.name,
         "file_path": floorplan.file_path,
+        "previous_file_path": floorplan.previous_file_path,
         "file_type": floorplan.file_type,
         "pin_size": floorplan.pin_size,
         "sort_order": floorplan.sort_order,
+        "drawing_layers": [
+            {column.name: getattr(drawing, column.name) for column in models.FloorplanDrawing.__table__.columns if column.name != 'created_at'}
+            for drawing in (await db.execute(select(models.FloorplanDrawing).where(models.FloorplanDrawing.floorplan_id == floorplan.id))).scalars()
+        ],
         "rooms": [
             {
                 "id": r.id,
                 "name": r.name,
                 "description": r.description,
+                "photo_path": r.photo_path,
                 "x_coordinate": r.x_coordinate,
                 "y_coordinate": r.y_coordinate,
             }

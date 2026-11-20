@@ -1,21 +1,32 @@
-import { useRef, useEffect, useState, memo, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useState, memo, useCallback } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
-import { Document as PdfDocument, Page as PdfPage, pdfjs } from 'react-pdf';
+import { pdfjs } from 'react-pdf';
+import { TiledFloorplan } from './TiledFloorplan';
+import { BoundedImageFloorplan } from './BoundedImageFloorplan';
+import FloorplanDrawingSurface from './FloorplanDrawingSurface';
 import '@google/model-viewer';
 import { API_URL } from '../api';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { floorplanLogger } from '../floorplanLogger';
 
+if (import.meta.env.VITE_PORTABLE === 'true') {
+  const modelViewer = customElements.get('model-viewer');
+  modelViewer.dracoDecoderLocation = '/model-decoders/draco/';
+  modelViewer.ktx2TranscoderLocation = '/model-decoders/basis/';
+}
+
 const pdfWorkerUrl = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
-pdfjs.GlobalWorkerOptions.workerSrc = `${pdfWorkerUrl}?v=${encodeURIComponent(import.meta.env.VITE_APP_VERSION || 'dev')}`;
+// Vite hashes this local worker URL; keep it exact so PWA precaching works offline.
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 export const MapCanvas = memo(function MapCanvas({
   transformComponentRef,
   mapContentRef,
   mapMode,
+  drawingLayers,
   calibrationMode,
   floorplan,
   baseFloorplanId,
@@ -27,6 +38,7 @@ export const MapCanvas = memo(function MapCanvas({
   setIsDraggingOverlay,
   overlayDragRef,
   setPdfLoaded,
+  onAssetError,
   filteredRooms,
   pendingRooms,
   dispersedEquipment,
@@ -34,6 +46,7 @@ export const MapCanvas = memo(function MapCanvas({
   multiFloorRefPin,
   highlightedPin,
   equipColor,
+  showPins = true,
   showPointNames,
   handleMapClick,
   onPinRoomClick,
@@ -46,18 +59,41 @@ export const MapCanvas = memo(function MapCanvas({
   const newPinCoord = mapMode.type === 'add-form' ? mapMode.newPinCoord : null;
   const isRelocating = mapMode.type === 'relocate';
   const clickStartRef = useRef({ x: 0, y: 0 });
+  const lastViewportTransform = useRef(null);
   const canvasRef = useRef(null);
   const modelViewerRef = useRef(null);
   const [hoveredPin, setHoveredPin] = useState(null);
   const [loadError, setLoadError] = useState(false);
-  const [renderedFpIds, setRenderedFpIds] = useState(() => new Set());
-  const [prewarmedFpIds, setPrewarmedFpIds] = useState(() => new Set());
-  const renderedPathsRef = useRef(new Map());
-
   const mainFp = calibrationMode
     ? siteFloorplans.find(fp => fp.id === parseInt(baseFloorplanId, 10))
     : floorplan;
   const isGlb = mainFp?.file_type === 'glb';
+  const minimumScale = drawingLayers?.open ? 0.01 : 0.1;
+
+  useEffect(() => {
+    if (isGlb) return;
+    const wrapper = transformComponentRef.current?.instance?.wrapperComponent;
+    if (!wrapper) return;
+    const zoomWithWheel = event => {
+      if (!event.deltaY) return;
+      const controls = transformComponentRef.current;
+      if (!controls) return;
+      event.preventDefault();
+      const { scale, positionX, positionY } = controls.instance.state;
+      const units = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? wrapper.clientHeight : 1;
+      const delta = Math.max(-160, Math.min(160, event.deltaY * units));
+      // Keep the change proportional to the current zoom. A fixed decrement
+      // can shrink a fitted drawing almost to zero in one wheel notch.
+      const nextScale = Math.min(100, Math.max(Math.min(scale, minimumScale), scale * Math.exp(-delta * 0.0035)));
+      if (nextScale === scale) return;
+      const bounds = wrapper.getBoundingClientRect();
+      const x = event.clientX - bounds.left, y = event.clientY - bounds.top;
+      const ratio = nextScale / scale;
+      controls.setTransform(x + (positionX - x) * ratio, y + (positionY - y) * ratio, nextScale, 0);
+    };
+    wrapper.addEventListener('wheel', zoomWithWheel, { passive: false });
+    return () => wrapper.removeEventListener('wheel', zoomWithWheel);
+  }, [isGlb, minimumScale, transformComponentRef]);
 
   const mainFpRef = useRef(mainFp);
   useEffect(() => {
@@ -68,29 +104,30 @@ export const MapCanvas = memo(function MapCanvas({
     const activeId = targetFpId || mainFpRef.current?.id;
     if (!activeId) return;
 
-    setRenderedFpIds(prev => {
-      if (prev.has(activeId)) return prev;
-      const next = new Set(prev);
-      next.add(activeId);
-      return next;
-    });
-
     if (activeId === mainFpRef.current?.id) {
       setLoadError(false);
+      onAssetError?.(null);
       floorplanLogger.recordAssetSuccess(activeId, {
         fileType: mainFpRef.current?.file_type || 'image',
         ...assetDetails
       });
       if (setPdfLoaded) setPdfLoaded(true);
     }
-  }, [setPdfLoaded]);
+  }, [setPdfLoaded, onAssetError]);
 
-  const onMapLoadError = useCallback((targetFpId = null) => {
-    const activeId = targetFpId || mainFpRef.current?.id;
+  const onMapLoadError = useCallback((targetFpId = null, error = null, details = {}) => {
+    const activeId = typeof targetFpId === 'number' ? targetFpId : mainFpRef.current?.id;
+    floorplanLogger.recordFailure(activeId, error || new Error('Floorplan asset failed to load'), {
+      stage: 'asset.load',
+      file_path: mainFpRef.current?.file_path,
+      file_type: mainFpRef.current?.file_type,
+      ...details,
+    });
     if (activeId === mainFpRef.current?.id) {
       setLoadError(true);
+      onAssetError?.(String(activeId));
     }
-  }, []);
+  }, [onAssetError]);
 
   const setModelViewerRef = (node) => {
     if (modelViewerRef.current) {
@@ -110,86 +147,23 @@ export const MapCanvas = memo(function MapCanvas({
   // Reset loading/error when floorplan changes and start asset timing
   useEffect(() => {
     setLoadError(false);
+    onAssetError?.(null);
     if (!mainFp?.id || !mainFp?.file_path) return;
 
-    // Check if file_path changed (e.g. replaced floorplan)
-    const prevPath = renderedPathsRef.current.get(mainFp.id);
-    if (prevPath && prevPath !== mainFp.file_path) {
-      setRenderedFpIds(prev => {
-        const next = new Set(prev);
-        next.delete(mainFp.id);
-        return next;
-      });
-    }
-    renderedPathsRef.current.set(mainFp.id, mainFp.file_path);
+    if (setPdfLoaded) setPdfLoaded(false);
+    floorplanLogger.recordAssetStart(mainFp.id, {
+      fileType: mainFp.file_type || 'image', filePath: mainFp.file_path
+    });
+  }, [mainFp?.id, mainFp?.file_path, mainFp?.file_type, calibrationMode, setPdfLoaded, onAssetError]);
 
-    // If this floorplan's layer has already rendered, switch is instant
-    if (renderedFpIds.has(mainFp.id)) {
-      if (setPdfLoaded) setPdfLoaded(true);
-      floorplanLogger.recordAssetSuccess(mainFp.id, {
-        fileType: mainFp.file_type || 'image',
-        extraInfo: '(instant cached canvas)'
-      });
-    } else {
-      if (setPdfLoaded) setPdfLoaded(false);
-      floorplanLogger.recordAssetStart(mainFp.id, {
-        fileType: mainFp.file_type || 'image',
-        filePath: mainFp.file_path
-      });
-    }
-  }, [floorplan?.id, mainFp?.id, mainFp?.file_path, mainFp?.file_type, calibrationMode, setPdfLoaded, renderedFpIds]);
-
-  // Background pre-warming of site floorplans in idle time
-  useEffect(() => {
-    if (!siteFloorplans || siteFloorplans.length === 0 || !mainFp?.id) return;
-    if (!renderedFpIds.has(mainFp.id)) return; // Pre-warm only after current floor is ready
-
-    const unrendered = siteFloorplans.filter(fp => fp && fp.id && fp.file_type !== 'glb' && !renderedFpIds.has(fp.id) && !prewarmedFpIds.has(fp.id) && fp.id !== mainFp.id);
-    if (unrendered.length === 0) return;
-
-    const nextFp = unrendered[0];
-    let cancelled = false;
-
-    const prewarm = () => {
-      if (cancelled) return;
-      setPrewarmedFpIds(prev => {
-        if (prev.has(nextFp.id)) return prev;
-        const next = new Set(prev);
-        next.add(nextFp.id);
-        return next;
-      });
-    };
-
-    let timerId;
-    if ('requestIdleCallback' in window) {
-      const idleId = window.requestIdleCallback(prewarm, { timeout: 1200 });
-      return () => {
-        cancelled = true;
-        window.cancelIdleCallback(idleId);
-      };
-    } else {
-      timerId = setTimeout(prewarm, 400);
-      return () => {
-        cancelled = true;
-        clearTimeout(timerId);
-      };
-    }
-  }, [siteFloorplans, mainFp?.id, renderedFpIds, prewarmedFpIds]);
-
-  const activeFloorplansToRender = useMemo(() => {
-    const map = new Map();
-    if (mainFp?.id) {
-      map.set(mainFp.id, mainFp);
-    }
-    if (Array.isArray(siteFloorplans)) {
-      for (const fp of siteFloorplans) {
-        if (fp && fp.id && (renderedFpIds.has(fp.id) || prewarmedFpIds.has(fp.id))) {
-          map.set(fp.id, fp);
-        }
-      }
-    }
-    return Array.from(map.values());
-  }, [mainFp, siteFloorplans, renderedFpIds, prewarmedFpIds]);
+  const notifyContinuousGesture = (phase, gesture, event) => {
+    // Wheel/trackpad events have no reliable pointer release; retain their
+    // adaptive quiet period instead of treating each wheel callback as a drag.
+    if (event?.type === 'wheel') return;
+    mapContentRef.current?.dispatchEvent(new CustomEvent('equipmap-map-gesture', {
+      detail: { phase, gesture }
+    }));
+  };
 
   // Constants for pin rendering (matching CSS)
   const ROOM_RADIUS = 8;
@@ -211,26 +185,26 @@ export const MapCanvas = memo(function MapCanvas({
         return;
       }
 
-      // Sync canvas size if needed
-      const wrapper = transformComponentRef.current?.wrapperElement || canvas.parentElement;
+      // Keep the screen-space pin surface bounded on high-DPI monitors too.
+      const wrapper = transformComponentRef.current?.instance?.wrapperComponent || canvas.parentElement;
       const rect = wrapper?.getBoundingClientRect();
-      if (rect && (canvas.width !== rect.width * (window.devicePixelRatio || 1) || canvas.height !== rect.height * (window.devicePixelRatio || 1))) {
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        canvas.style.width = `${rect.width}px`;
-        canvas.style.height = `${rect.height}px`;
-        const ctx = canvas.getContext('2d');
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const width = rect?.width || 1;
+      const height = rect?.height || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(4 * 1024 * 1024 / (width * height)));
+      const pixelWidth = Math.max(1, Math.floor(width * dpr));
+      const pixelHeight = Math.max(1, Math.floor(height * dpr));
+      if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+        canvas.width = pixelWidth;
+        canvas.height = pixelHeight;
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
       }
-
       const ctx = canvas.getContext('2d');
-      const width = canvas.width / (window.devicePixelRatio || 1);
-      const height = canvas.height / (window.devicePixelRatio || 1);
+      ctx.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
       // Don't draw pins if we're in calibration mode or if the map is still loading/error
-      if (calibrationMode || loadError) {
+      if (calibrationMode || loadError || (!showPins && !(editMode && newPinCoord))) {
         frameId = requestAnimationFrame(draw);
         return;
       }
@@ -241,7 +215,7 @@ export const MapCanvas = memo(function MapCanvas({
       const time = Date.now();
 
       // Draw Rooms
-      const allRooms = [...filteredRooms, ...pendingRooms];
+      const allRooms = showPins ? [...filteredRooms, ...pendingRooms] : [];
       allRooms.forEach(room => {
         if (room.x_coordinate == null || room.y_coordinate == null) return;
         const sx = room.x_coordinate * scale + panX;
@@ -304,7 +278,7 @@ export const MapCanvas = memo(function MapCanvas({
       });
 
       // Draw Equipment
-      dispersedEquipment.forEach(equip => {
+      (showPins ? dispersedEquipment : []).forEach(equip => {
         const sx = equip.x_display * scale + panX;
         const sy = equip.y_display * scale + panY;
 
@@ -365,7 +339,7 @@ export const MapCanvas = memo(function MapCanvas({
       });
 
       // Draw Tickets
-      tickets.forEach(ticket => {
+      (showPins ? tickets : []).forEach(ticket => {
         const sx = ticket.x_coordinate * scale + panX;
         const sy = ticket.y_coordinate * scale + panY;
 
@@ -446,7 +420,7 @@ export const MapCanvas = memo(function MapCanvas({
       });
 
       // Draw Multi-Floor Reference Pin
-      if (multiFloorRefPin && multiFloorRefPin.x_coordinate != null && multiFloorRefPin.y_coordinate != null) {
+      if (showPins && multiFloorRefPin && multiFloorRefPin.x_coordinate != null && multiFloorRefPin.y_coordinate != null) {
         const sx = multiFloorRefPin.x_coordinate * scale + panX;
         const sy = multiFloorRefPin.y_coordinate * scale + panY;
 
@@ -567,10 +541,11 @@ export const MapCanvas = memo(function MapCanvas({
 
     frameId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frameId);
-  }, [filteredRooms, pendingRooms, dispersedEquipment, tickets, multiFloorRefPin, highlightedPin, hoveredPin, editMode, newPinCoord, activeActionType, equipColor, calibrationMode, transformComponentRef, showPointNames, loadError]);
+  }, [filteredRooms, pendingRooms, dispersedEquipment, tickets, multiFloorRefPin, highlightedPin, hoveredPin, editMode, newPinCoord, activeActionType, equipColor, calibrationMode, transformComponentRef, showPins, showPointNames, loadError]);
 
   // ── Hit Testing ────────────────────────────────────────────────────────────
   const checkPinHit = (clientX, clientY) => {
+    if (!showPins) return null;
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
@@ -646,6 +621,13 @@ export const MapCanvas = memo(function MapCanvas({
     const dy = Math.abs(e.clientY - clickStartRef.current.y);
     if (dx > 5 || dy > 5) return;
 
+    const drawingPoint = () => {
+      const bounds = mapContentRef.current.getBoundingClientRect();
+      return { x: Math.max(0, Math.min(100, (e.clientX - bounds.left) / bounds.width * 100)),
+        y: Math.max(0, Math.min(100, (e.clientY - bounds.top) / bounds.height * 100)) };
+    };
+    if (drawingLayers?.editing) { drawingLayers.mapPoint(drawingPoint(), e); return; }
+
     const hit = checkPinHit(e.clientX, e.clientY);
     if (hit) {
       if (hit.type === 'multi-floor-ref') {
@@ -656,6 +638,7 @@ export const MapCanvas = memo(function MapCanvas({
       return;
     }
 
+    if (!calibrationMode && mapMode.type === 'view' && drawingLayers?.open && drawingLayers.mapPoint(drawingPoint())) return;
     handleMapClick(e);
   };
 
@@ -691,14 +674,28 @@ export const MapCanvas = memo(function MapCanvas({
         <>
           <TransformWrapper
             ref={transformComponentRef}
+            onTransform={(_, state) => {
+              const { scale, positionX, positionY } = state;
+              const previous = lastViewportTransform.current;
+              if (previous?.scale === scale && previous.positionX === positionX && previous.positionY === positionY) return;
+              lastViewportTransform.current = { scale, positionX, positionY };
+              // Keep drawing handles at a constant screen size while zooming.
+              mapContentRef.current?.style.setProperty('--drawing-view-scale', String(state.scale));
+              mapContentRef.current?.dispatchEvent(new Event('equipmap-map-transform'));
+            }}
+            onPanningStart={(_, event) => notifyContinuousGesture('start', 'pan', event)}
+            onPanningStop={(_, event) => notifyContinuousGesture('end', 'pan', event)}
+            onPinchStart={(_, event) => notifyContinuousGesture('start', 'pinch', event)}
+            onPinchStop={(_, event) => notifyContinuousGesture('end', 'pinch', event)}
             initialScale={1}
-            minScale={0.5}
+            minScale={minimumScale}
             maxScale={100}
             centerOnInit={true}
             // Let floorplan edges move into the viewport center without snapping back.
             limitToBounds={false}
-            panning={{ velocityDisabled: true }}
-            wheel={{ step: 0.01, smoothStep: 0.002 }}
+            panning={{ velocityDisabled: true, excluded: ['drawing-region-handle', 'drawing-map-sheet-moving', 'drawing-match-marker'] }}
+            doubleClick={{ excluded: ['drawing-match-marker'] }}
+            wheel={{ disabled: true }}
           >
             <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
               <div
@@ -741,61 +738,45 @@ export const MapCanvas = memo(function MapCanvas({
                     );
                   }
 
+                  const fp = mainFp;
                   return (
-                    <>
-                      {activeFloorplansToRender.map(fp => {
-                        const isCurrent = fp.id === mainFp.id;
-                        return (
-                          <div
-                            key={`${fp.id}_${fp.file_path}`}
-                            id={`floorplan-layer-${fp.id}`}
-                            style={{
-                              display: isCurrent ? 'block' : 'none',
-                              width: '100%',
-                              height: 'auto'
-                            }}
-                          >
-                            {fp.file_type === 'pdf' ? (
-                              <PdfDocument
-                                file={`${API_URL}${fp.file_path}`}
-                                onLoadSuccess={(pdf) => {
-                                  floorplanLogger.recordPdfDocParsed(fp.id, { numPages: pdf?.numPages || 1 });
-                                }}
-                                onLoadError={() => onMapLoadError(fp.id)}
-                                loading={null}
-                              >
-                                <PdfPage
-                                  pageNumber={1}
-                                  width={2000}
-                                  devicePixelRatio={5}
-                                  renderTextLayer={false}
-                                  renderAnnotationLayer={false}
-                                  onRenderSuccess={() => onMapLoadSuccess({ extraInfo: '(devicePixelRatio: 5, width: 2000px)' }, fp.id)}
-                                  onRenderError={() => onMapLoadError(fp.id)}
-                                />
-                              </PdfDocument>
-                            ) : (
-                              <img
-                                ref={(el) => {
-                                  if (el?.complete && el.naturalWidth > 0) {
-                                    onMapLoadSuccess({ extraInfo: '(memory cache decode)' }, fp.id);
-                                  }
-                                }}
-                                src={`${API_URL}${fp.file_path}`}
-                                className="svg-layer w-full h-auto object-contain"
-                                alt={fp.name || 'Floorplan'}
-                                draggable="false"
-                                onLoad={() => onMapLoadSuccess({ extraInfo: '(network/disk image decode)' }, fp.id)}
-                                onError={() => onMapLoadError(fp.id)}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </>
+                    <div
+                      key={`${fp.id}_${fp.file_path}`}
+                      id={`floorplan-layer-${fp.id}`}
+                      className="w-full h-auto"
+                    >
+                      {fp.file_type === 'pdf' ? (
+                        <TiledFloorplan
+                          url={`${API_URL}${fp.file_path}`}
+                          transformRef={transformComponentRef}
+                          onParsed={pdf => floorplanLogger.recordPdfDocParsed(fp.id, { numPages: pdf.numPages })}
+                          onLoad={() => onMapLoadSuccess({ extraInfo: 'Viewport PDF tiles' }, fp.id)}
+                          onError={(error, details) => onMapLoadError(fp.id, error, details)}
+                        />
+                      ) : fp.file_type === 'image' ? (
+                        <BoundedImageFloorplan url={`${API_URL}${fp.file_path}`}
+                          onLoad={() => onMapLoadSuccess({ extraInfo: 'Bounded image canvas' }, fp.id)}
+                          onError={(error, details) => onMapLoadError(fp.id, error, details)} />
+                      ) : (
+                        <img
+                          ref={(el) => {
+                            if (el?.complete && el.naturalWidth > 0) {
+                              onMapLoadSuccess({ extraInfo: '(memory cache decode)' }, fp.id);
+                            }
+                          }}
+                          src={`${API_URL}${fp.file_path}`}
+                          className="svg-layer w-full h-auto object-contain"
+                          alt={fp.name || 'Floorplan'}
+                          draggable="false"
+                          onLoad={() => onMapLoadSuccess({ extraInfo: '(network/disk image decode)' }, fp.id)}
+                          onError={() => onMapLoadError(fp.id)}
+                        />
+                      )}
+                    </div>
                   );
                 })()}
 
+                {!calibrationMode && drawingLayers && <FloorplanDrawingSurface model={drawingLayers} transformRef={transformComponentRef} />}
                 {calibrationMode && floorplan && (
                   <div
                     style={{
@@ -842,17 +823,14 @@ export const MapCanvas = memo(function MapCanvas({
                     }}
                   >
                     {floorplan.file_type === 'pdf' ? (
-                      <PdfDocument file={`${API_URL}${floorplan.file_path}`} loading={null}>
-                        <PdfPage
-                          pageNumber={1}
-                          width={2000}
-                          devicePixelRatio={5}
-                          renderTextLayer={false}
-                          renderAnnotationLayer={false}
-                          onRenderSuccess={() => onMapLoadSuccess({ extraInfo: 'Calibration overlay PDF' })}
-                          onRenderError={onMapLoadError}
-                        />
-                      </PdfDocument>
+                      <TiledFloorplan
+                        key={`${floorplan.id}_${floorplan.file_path}`}
+                        url={`${API_URL}${floorplan.file_path}`}
+                        transformRef={transformComponentRef}
+                        overlay={overlayTransform}
+                        onLoad={() => onMapLoadSuccess({ extraInfo: 'Calibration viewport PDF tiles' })}
+                        onError={(error, details) => onMapLoadError(null, error, details)}
+                      />
                     ) : floorplan.file_type === 'glb' ? (
                       <model-viewer
                         ref={(node) => {
@@ -864,6 +842,11 @@ export const MapCanvas = memo(function MapCanvas({
                         src={`${API_URL}${floorplan.file_path}`}
                         style={{ width: '100%', height: '1000px' }}
                       />
+                    ) : floorplan.file_type === 'image' ? (
+                      <BoundedImageFloorplan key={`${floorplan.id}_${floorplan.file_path}`}
+                        url={`${API_URL}${floorplan.file_path}`}
+                        onLoad={() => onMapLoadSuccess({ extraInfo: 'Calibration image canvas' })}
+                        onError={(error, details) => onMapLoadError(null, error, details)} />
                     ) : (
                       <img
                         ref={(el) => {
@@ -886,6 +869,7 @@ export const MapCanvas = memo(function MapCanvas({
             <canvas
               ref={canvasRef}
               className="map-overlay-canvas"
+              hidden={drawingLayers?.editing && drawingLayers.tool === 'match'}
             />
           )}
         </>

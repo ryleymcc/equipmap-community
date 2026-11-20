@@ -1,8 +1,10 @@
+import { cachePhotoThumbnails } from './photoCache';
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { getSites, getFloorplans, getAllEquipment, getAllRooms, checkSyncUpdates, API_URL, BASE_URL, LOW_PRIORITY_CONFIG } from './api';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { populateFloorplansIntoApiCache, getCachedDashboardData } from './cacheUtils';
+import { captureDiagnostic } from './diagnostics.js';
 
 const OfflineContext = createContext(null);
 
@@ -103,8 +105,8 @@ export const OfflineProvider = ({ children }) => {
       // 5. Fetch/Load global rooms and equipment (low priority)
       console.log('OfflineSync: Processing global equipment and rooms...');
       await Promise.allSettled([
-        getCachedOrFetch('/api/equipment', () => getAllEquipment(LOW_PRIORITY_CONFIG), 'equipment').then(() => console.log('OfflineSync: Processed all equipment')),
-        getCachedOrFetch('/api/rooms', () => getAllRooms(LOW_PRIORITY_CONFIG), 'rooms').then(() => console.log('OfflineSync: Processed all rooms'))
+        getCachedOrFetch('/api/equipment', () => getAllEquipment(LOW_PRIORITY_CONFIG), 'equipment').then(items => cachePhotoThumbnails(items)),
+        getCachedOrFetch('/api/rooms', () => getAllRooms(LOW_PRIORITY_CONFIG), 'rooms').then(items => cachePhotoThumbnails(items))
       ]);
 
       // 6. Prefetch each site's floorplans and populate caches
@@ -126,7 +128,7 @@ export const OfflineProvider = ({ children }) => {
                 const cachedFile = await assetsCache.match(fileUrl);
                 if (!cachedFile) {
                   console.log(`OfflineSync: Pre-fetching floorplan asset ${fileUrl}`);
-                  const res = await fetch(fileUrl, { priority: 'low' }).catch(err => console.warn(`OfflineSync: Asset fetch failed for ${fp.name}:`, err));
+                  const res = await fetch(fileUrl, { priority: 'low', cache: 'reload' }).catch(err => console.warn(`OfflineSync: Asset fetch failed for ${fp.name}:`, err));
                   if (res && res.ok) {
                     await assetsCache.put(fileUrl, res.clone());
                   }
@@ -144,6 +146,7 @@ export const OfflineProvider = ({ children }) => {
       setLastSyncTime(now);
       console.log('OfflineSync: Background sync completed successfully at', now);
     } catch (error) {
+      captureDiagnostic(error, 'offline.sync', { stage: 'background-sync' }, 'warning');
       console.error('OfflineSync: Background sync failed:', error);
     } finally {
       syncInProgress.current = false;

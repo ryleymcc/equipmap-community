@@ -5,40 +5,28 @@ from starlette.responses import JSONResponse, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from config import IS_PRODUCTION
 
 logger = logging.getLogger("backend.limiter")
 
 def get_real_ip(request: Request) -> str:
-    """
-    Extract the client's real IP address, accounting for reverse proxies (Nginx, Traefik, Cloudflare).
-    """
-    # Cloudflare connecting IP
-    cf_ip = request.headers.get("CF-Connecting-IP")
-    if cf_ip:
-        return cf_ip.strip()
-
-    # Standard proxy forwarded header (take the leftmost client IP)
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-
-    # Standard real IP header
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-
-    # Default fallback to direct connection host
+    # Uvicorn resolves forwarding headers only for configured trusted proxies.
+    # Reading headers here would bypass that trust boundary.
     return get_remote_address(request)
 
 # Rate limit configuration via environment variables
 RATE_LIMIT_LOGIN = os.getenv("RATE_LIMIT_LOGIN", "10/minute")
 RATE_LIMIT_DEFAULT = os.getenv("RATE_LIMIT_DEFAULT", "200/minute")
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() in ("true", "1", "yes")
+RATE_LIMIT_STORAGE_URI = os.getenv("RATE_LIMIT_STORAGE_URI", "memory://")
+if IS_PRODUCTION and os.getenv("EQUIPMAP_PORTABLE") != "1" and RATE_LIMIT_ENABLED and not RATE_LIMIT_STORAGE_URI.startswith(("redis://", "rediss://")):
+    raise RuntimeError("Production rate limiting requires shared Redis storage via RATE_LIMIT_STORAGE_URI")
 
 limiter = Limiter(
     key_func=get_real_ip,
     default_limits=[RATE_LIMIT_DEFAULT],
     enabled=RATE_LIMIT_ENABLED,
+    storage_uri=RATE_LIMIT_STORAGE_URI,
 )
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:

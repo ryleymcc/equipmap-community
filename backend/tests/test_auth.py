@@ -52,30 +52,17 @@ async def test_unauthorized_access(client: AsyncClient):
     assert response.status_code == 401
 
 @pytest.mark.asyncio
-async def test_auth_etag_and_304(client: AsyncClient, admin_token: str):
-    headers = {"Authorization": f"Bearer {admin_token}"}
-
-    # 1. /api/users ETag and 304
-    response = await client.get("/api/users", headers=headers)
+@pytest.mark.parametrize("path", ["/api/users", "/api/users/me", "/api/users/assignable"])
+async def test_user_data_is_not_cached(client: AsyncClient, admin_token: str, path: str):
+    headers = {"Authorization": f"Bearer {admin_token}", "If-None-Match": "*"}
+    response = await client.get(path, headers=headers)
     assert response.status_code == 200
-    etag_users = response.headers.get("etag")
-    assert etag_users is not None
+    assert "no-store" in response.headers["cache-control"]
+    assert "etag" not in response.headers
 
-    headers_with_etag_users = {**headers, "If-None-Match": etag_users}
-    response_users_304 = await client.get("/api/users", headers=headers_with_etag_users)
-    assert response_users_304.status_code == 304
-    assert response_users_304.text == ""
-
-    # 2. /api/users/me ETag and 304
-    response_me = await client.get("/api/users/me", headers=headers)
-    assert response_me.status_code == 200
-    etag_me = response_me.headers.get("etag")
-    assert etag_me is not None
-
-    headers_with_etag_me = {**headers, "If-None-Match": etag_me}
-    response_me_304 = await client.get("/api/users/me", headers=headers_with_etag_me)
-    assert response_me_304.status_code == 304
-    assert response_me_304.text == ""
+    rejected = await client.get(path, headers={"If-None-Match": "*"})
+    assert rejected.status_code == 401
+    assert "no-store" in rejected.headers["cache-control"]
 
 @pytest.mark.asyncio
 async def test_granular_permissions_crud_and_token(client: AsyncClient, admin_token: str):

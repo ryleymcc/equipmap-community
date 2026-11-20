@@ -1,3 +1,18 @@
+# Community update 1.0.56
+
+- Floorplan drawing layers support placement, comparison, cropping, landmark
+  matching, and independent pin visibility. Large PDFs use viewport-based detail.
+- Equipment and rooms support photos. Equipment records also support documents.
+- Administrators can manage upload files and, with an installed Windows
+  template, export a Shared copy. Room descriptions support bulk editing.
+- Authentication now binds access tokens to user IDs and enforces refresh
+  rotation. User and audit API responses are marked private and non-cacheable.
+- Compose includes internal Redis-backed rate limiting. Cross-origin access is
+  opt-in. Existing public reads and direct upload URLs remain accessible.
+
+See the [hosting guide](HOSTING.md) before upgrading and the
+[Windows Shared export guide](PORTABLE_WEBSITE_DOWNLOAD.md) to enable exports.
+
 # Initial community release
 
 This source snapshot intentionally starts a new Git history. The original

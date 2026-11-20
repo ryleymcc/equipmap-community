@@ -1931,3 +1931,9 @@
     min-width: var(--control-height-lg);
   }
 }
+
+/* Equipment descriptions and tool lists retain user-entered line breaks. */
+.equipment-multiline {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

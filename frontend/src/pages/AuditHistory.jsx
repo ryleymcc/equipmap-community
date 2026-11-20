@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import SortableTableHeader from '../components/SortableTableHeader';
+import TablePagination from '../components/TablePagination';
+import DataManager from '../components/DataManager';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { getAuditLogs, undoAction } from '../api';
 import {
@@ -12,16 +15,36 @@ import PendingChatGPTChanges from '../components/PendingChatGPTChanges';
 export default function AuditHistory() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isDataManager = location.pathname === '/audit-log/data';
   const { user, isAdmin, isEditor, canUndoAllAuditLogs, loading } = useAuth();
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [isUndoLoading, setIsUndoLoading] = useState(null); // ID of log being undid
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
   const [pendingRefresh, setPendingRefresh] = useState(0);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [sortBy, setSortBy] = useState('date');
+  const [sortDirection, setSortDirection] = useState('desc');
+  const sortColumn = field => {
+    setSortDirection(sortBy === field ? (sortDirection === 'asc' ? 'desc' : 'asc') : field === 'name' ? 'asc' : 'desc');
+    setSortBy(field);
+    setPage(1);
+  };
+  const sortedLogs = useMemo(() => [...logs].sort((a, b) => {
+    const comparison = sortBy === 'name'
+      ? (a.target_name || '').localeCompare(b.target_name || '', undefined, { numeric: true, sensitivity: 'base' })
+      : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    return (sortDirection === 'asc' ? 1 : -1) * comparison || b.id - a.id;
+  }), [logs, sortBy, sortDirection]);
+  const currentPage = pageSize === 'all' ? 1 : Math.min(page, Math.max(1, Math.ceil(logs.length / pageSize)));
+  const visibleLogs = pageSize === 'all' ? sortedLogs : sortedLogs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   const canUndoLog = (log) => {
-    if (log.action === 'undo') return false;
+    if (log.undo_unavailable_reason || log.action === 'undo' || log.action === 'cleanup') return false;
     if (isAdmin || canUndoAllAuditLogs) return true;
     if (log.user_id && user?.id) return log.user_id === user.id;
     if (log.username && user?.username) return log.username === user.username;
@@ -31,10 +54,16 @@ export default function AuditHistory() {
   const loadLogs = useCallback(async () => {
     try {
       setIsLoading(true);
+      setLoadError('');
       const res = await getAuditLogs();
       setLogs(res.data);
+      setPage(1);
     } catch (error) {
-      console.error('Failed to load audit logs:', error);
+      setLogs([]);
+      setSelectedLog(null);
+      setLoadError([401, 403].includes(error.response?.status)
+        ? 'You do not have permission to view audit history.'
+        : 'Could not load audit history. Check your connection and refresh.');
     } finally {
       setIsLoading(false);
     }
@@ -61,8 +90,8 @@ export default function AuditHistory() {
   }, [loading, isEditor, navigate, location]);
 
   useEffect(() => {
-    if (isEditor) queueMicrotask(loadLogs);
-  }, [isEditor, loadLogs]);
+    if (isEditor && !isDataManager) queueMicrotask(loadLogs);
+  }, [isEditor, isDataManager, loadLogs]);
 
   const handleUndo = async (logId) => {
     if (!window.confirm('Are you sure you want to undo this action?')) return;
@@ -116,38 +145,45 @@ export default function AuditHistory() {
 
       <div className="main-content">
         <header className="app-header dashboard-header">
-          <button className="trigger-btn" onClick={() => setIsLeftDrawerOpen(true)}>
+          <button className="trigger-btn" aria-label="Open navigation" title="Open navigation" onClick={() => setIsLeftDrawerOpen(true)}>
             <Menu size={20} />
           </button>
           <div className="items-center gap-md ml-md flex-1">
             <HistoryIcon size={24} color="var(--primary-color)" />
-            <h1 className="text-lg font-semibold m-0">Audit History</h1>
+            <h1 className="text-lg font-semibold m-0">{isDataManager ? 'Data manager' : 'Audit History'}</h1>
           </div>
-          <button
+          {!isDataManager && <button
             className="trigger-btn"
             onClick={() => { loadLogs(); setPendingRefresh((value) => value + 1); }}
             title="Refresh Logs"
           >
             <RefreshCw size={20} className={isLoading ? 'spinning' : ''} />
-          </button>
+          </button>}
         </header>
 
         <div className="list-view-container">
+          <nav className="data-manager-nav" aria-label="Audit dashboard">
+            <Link className="btn btn-secondary" to="/audit-log" aria-current={!isDataManager ? 'page' : undefined}>Audit history</Link>
+            {isAdmin && <Link className="btn btn-secondary" to="/audit-log/data" aria-current={isDataManager ? 'page' : undefined}>Data manager</Link>}
+          </nav>
+          {isDataManager ? (isAdmin ? <DataManager /> : <p role="alert">Only admins can manage upload storage.</p>) : <>
           <PendingChatGPTChanges refreshKey={pendingRefresh} onChanged={loadLogs} />
           {isLoading ? (
             <div className="flex-center p-2xl">
               <div className="loader">Loading history...</div>
             </div>
+          ) : loadError ? (
+            <p className="list-empty" role="alert">{loadError}</p>
           ) : (
             <div className="list-table-wrapper">
               <table className="list-table">
                 <thead>
                   <tr>
-                    <th>Timestamp</th>
+                    <SortableTableHeader field="date" sortBy={sortBy} direction={sortDirection} onSort={sortColumn}>Timestamp</SortableTableHeader>
                     <th>User</th>
                     <th>Action</th>
                     <th>Type</th>
-                    <th>Target</th>
+                    <SortableTableHeader field="name" sortBy={sortBy} direction={sortDirection} onSort={sortColumn}>Target</SortableTableHeader>
                     <th>Message</th>
                     <th>Actions</th>
                   </tr>
@@ -163,7 +199,7 @@ export default function AuditHistory() {
                       </td>
                     </tr>
                   ) : (
-                    logs.map(log => (
+                    visibleLogs.map(log => (
                       <tr key={log.id}>
                         <td className="nowrap">{formatDate(log.timestamp)}</td>
                         <td>
@@ -194,20 +230,21 @@ export default function AuditHistory() {
                         <td>{log.target_name || (log.target_id ? `ID: ${log.target_id}` : '-')}</td>
                         <td>{log.message}</td>
                         <td>
-                          <div className="flex-row gap-xs items-center">
+                          <div className="flex-row flex-wrap gap-xs items-center">
                             {(log.old_values || log.new_values) && (
                               <button
                                 type="button"
-                                className="btn btn-secondary btn-card-action"
+                                className="btn btn-secondary btn-sm flex-shrink-0"
                                 onClick={() => setSelectedLog(log)}
                               >
                                 <span>Details</span>
                               </button>
                             )}
+                            {log.undo_unavailable_reason && <span className="text-sm text-secondary" title={log.undo_unavailable_reason}>Undo unavailable · required upload deleted</span>}
                             {log.action !== 'undo' && canUndoLog(log) && (
                               <button
                                 type="button"
-                                className="btn btn-secondary btn-card-action gap-xs"
+                                className="btn btn-secondary btn-sm flex-shrink-0 gap-xs"
                                 onClick={() => handleUndo(log.id)}
                                 disabled={isUndoLoading === log.id}
                               >
@@ -224,6 +261,9 @@ export default function AuditHistory() {
               </table>
             </div>
           )}
+          {!isLoading && <TablePagination total={logs.length} page={currentPage} pageSize={pageSize}
+            onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} />}
+          </>}
         </div>
       </div>
 

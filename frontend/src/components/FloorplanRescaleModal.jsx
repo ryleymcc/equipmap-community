@@ -5,7 +5,7 @@ import { X, ZoomIn, ZoomOut, RefreshCw, Maximize2, Minus, Plus } from 'lucide-re
 import { API_URL } from '../api';
 import './FloorplanRescaleModal.css';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 
 export default function FloorplanRescaleModal(props) {

@@ -1,7 +1,8 @@
 import re
 from bs4 import BeautifulSoup
+from fastapi import HTTPException
 
-def parse_svg_for_rooms(svg_content: str):
+def parse_svg_for_rooms(svg_content: str | bytes):
     """
     Parses SVG content to find <text> elements.
     Returns a list of dicts with room info: [{'name': '...', 'x_coordinate': ..., 'y_coordinate': ...}]
@@ -54,3 +55,28 @@ def parse_svg_for_rooms(svg_content: str):
         })
 
     return rooms
+
+
+def validate_svg(source):
+    from lxml import etree
+    try:
+        tree = etree.parse(source, etree.XMLParser(resolve_entities=False, no_network=True))
+        if tree.docinfo.doctype or tree.xpath('//processing-instruction()') or etree.QName(tree.getroot()).localname != 'svg':
+            raise ValueError('Invalid SVG')
+        for node in tree.iter():
+            if not isinstance(node.tag, str):
+                continue
+            if etree.QName(node).localname.lower() in ('script', 'foreignobject', 'iframe', 'object', 'embed', 'animate', 'set', 'animatetransform', 'animatemotion'):
+                raise ValueError('Active content')
+            for key, value in node.attrib.items():
+                name = etree.QName(key).localname.lower()
+                if name.startswith('on') or (name == 'href' and not value.startswith(('#', 'data:image/png;base64,', 'data:image/jpeg;base64,', 'data:image/webp;base64,'))):
+                    raise ValueError('External or active content')
+                if any(not reference.strip(' \t\r\n\'\"').startswith('#') for reference in re.findall(r'url\((.*?)\)', value, re.I)):
+                    raise ValueError('External content')
+            if etree.QName(node).localname == 'style':
+                css = node.text or ''
+                if '\\' in css or re.search(r'@import', css, re.I) or any(not reference.strip(' \t\r\n\'\"').startswith('#') for reference in re.findall(r'url\((.*?)\)', css, re.I)):
+                    raise ValueError('External stylesheet content')
+    except Exception:
+        raise HTTPException(400, 'Choose a standalone SVG without scripts, embedded HTML or external resources.')

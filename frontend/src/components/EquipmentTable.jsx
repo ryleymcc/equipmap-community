@@ -1,6 +1,7 @@
+import EntityPhoto from './EntityPhoto';
 import { useState, useMemo } from 'react';
 import {
-  Package,  Map as MapIcon, Building,
+  Package, Map as MapIcon, Building,
   Check, X, Pencil, ExternalLink, Trash2,
   ChevronUp, ChevronDown, RefreshCw,
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight
@@ -33,9 +34,9 @@ export default function EquipmentTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
-  const [previousCount, setPreviousCount] = useState(filteredEquipment.length);
-  if (previousCount !== filteredEquipment.length) {
-    setPreviousCount(filteredEquipment.length);
+  const [previousResultCount, setPreviousResultCount] = useState(filteredEquipment.length);
+  if (previousResultCount !== filteredEquipment.length) {
+    setPreviousResultCount(filteredEquipment.length);
     setCurrentPage(1);
   }
 
@@ -206,26 +207,26 @@ export default function EquipmentTable({
                             onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                             autoFocus
                           />
-                        ) : equip.name}
+                        ) : <><EntityPhoto item={equip} kind="equipment" compact canEdit={isEditor} />{equip.name}</>}
                       </td>
                       <td>
                         {isEditing ? (
-                          <input
-                            className="inline-edit-input"
+                          <textarea aria-label="Description" rows={3}
+                            className="input-field"
                             value={editForm.description}
                             onChange={e => setEditForm({ ...editForm, description: e.target.value })}
                           />
-                        ) : (equip.description || '—')}
+                        ) : <span className="equipment-multiline">{equip.description || '—'}</span>}
                       </td>
                       <td>
                         {isEditing ? (
-                          <input
-                            className="inline-edit-input"
+                          <textarea aria-label="Tools required" rows={3}
+                            className="input-field"
                             value={editForm.tools_required}
                             onChange={e => setEditForm({ ...editForm, tools_required: e.target.value })}
                             placeholder="Tools Required"
                           />
-                        ) : (equip.tools_required || '—')}
+                        ) : <span className="equipment-multiline">{equip.tools_required || '—'}</span>}
                       </td>
                       <td>
                         {isEditing ? (

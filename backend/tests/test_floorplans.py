@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
-import io
+from pathlib import Path
+
+from routers import floorplans
 
 @pytest.fixture
 async def test_site_id(client: AsyncClient, admin_token: str):
@@ -8,6 +10,42 @@ async def test_site_id(client: AsyncClient, admin_token: str):
     site_data = {"name": "Floorplan Test Site"}
     response = await client.post("/api/sites", json=site_data, headers=headers)
     return response.json()["id"]
+
+@pytest.mark.asyncio
+async def test_upload_and_replace_isolate_files(client, admin_token, test_site_id, tmp_path, monkeypatch):
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    monkeypatch.setattr(floorplans, "UPLOAD_DIR", str(upload_dir))
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    existing = tmp_path / "sheet.svg"
+    existing.write_bytes(b"existing")
+
+    paths = []
+    contents = [b"<svg><text>North</text></svg>", b"<svg><text>South</text></svg>"]
+    for i, content in enumerate(contents):
+        response = await client.post("/api/floorplans", headers=headers,
+            data={"site_id": test_site_id, "name": f"Building {i}"},
+            files={"file": ("../sheet.svg", content, "image/svg+xml")})
+        assert response.status_code == 200, response.text
+        item = response.json()
+        assert item["rooms"][0]["name"] in ("North", "South")
+        paths.append(upload_dir / Path(item["file_path"]).name)
+
+    assert paths[0] != paths[1]
+    assert [p.read_bytes() for p in paths] == contents
+    assert existing.read_bytes() == b"existing"
+
+    invalid = {"file": ("sheet.svg", b"<svg><script/></svg>", "image/svg+xml")}
+    rejected = await client.post("/api/floorplans", headers=headers,
+        data={"site_id": test_site_id, "name": "Rejected"}, files=invalid)
+    assert rejected.status_code == 400
+    url = f"/api/floorplans/{item['id']}"
+    for method in ("POST", "PUT"):
+        rejected = await client.request(method, url + "/file", headers=headers, files=invalid)
+        assert rejected.status_code == 400
+    assert (await client.get(url)).json()["file_path"] == item["file_path"]
+    assert set(upload_dir.iterdir()) == set(paths)
+
 
 @pytest.mark.asyncio
 async def test_floorplan_lifecycle(client: AsyncClient, admin_token: str, test_site_id: int):

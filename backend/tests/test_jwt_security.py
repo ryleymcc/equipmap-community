@@ -9,7 +9,7 @@ import time
 import pytest
 import jwt
 
-from utils import SECRET_KEY
+from utils import SECRET_KEY, JWT_AUDIENCE, JWT_ISSUER
 
 
 def legacy_token(payload, secret=SECRET_KEY, algorithm="HS256"):
@@ -25,8 +25,8 @@ def legacy_token(payload, secret=SECRET_KEY, algorithm="HS256"):
 
 
 @pytest.mark.asyncio
-async def test_existing_hs256_token_still_authenticates(client, viewer_token):
-    payload = jwt.decode(viewer_token, SECRET_KEY, algorithms=["HS256"])
+async def test_current_hs256_wire_format_authenticates(client, viewer_token):
+    payload = jwt.decode(viewer_token, SECRET_KEY, algorithms=["HS256"], audience=JWT_AUDIENCE, issuer=JWT_ISSUER)
     token = legacy_token(payload)
     response = await client.get("/api/users/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
@@ -35,8 +35,8 @@ async def test_existing_hs256_token_still_authenticates(client, viewer_token):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["expired", "signature", "algorithm", "malformed", "subject"])
-async def test_invalid_tokens_return_401(client, kind):
-    payload = {"sub": "viewer_test", "exp": int(time.time()) + 300}
+async def test_invalid_tokens_return_401(client, viewer_token, kind):
+    payload = jwt.decode(viewer_token, SECRET_KEY, algorithms=["HS256"], audience=JWT_AUDIENCE, issuer=JWT_ISSUER)
     if kind == "expired":
         payload["exp"] = int(time.time()) - 300
     if kind == "subject":

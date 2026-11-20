@@ -7,16 +7,19 @@ import './index.css'
 import { registerSW } from 'virtual:pwa-register'
 import { trackButtonClick, trackPageLoadTime } from './metrics';
 import { deferPwaUpdate } from './pwaUpdate';
+import { captureDiagnostic } from './diagnostics.js';
 
 // Auto-recover when a new release replaces hashed JS chunks or dynamic imports fail
 window.addEventListener('vite:preloadError', (event) => {
+  captureDiagnostic(event.payload, 'app.preload', { stage: 'module.import' });
   console.warn('New deployment detected (stale chunk), reloading page to fetch latest version...', event);
   const reloadKey = 'equipmap_last_preload_reload';
   const lastReload = Number(sessionStorage.getItem(reloadKey) || 0);
   const now = Date.now();
   if (now - lastReload > 10000) {
     sessionStorage.setItem(reloadKey, String(now));
-    window.location.reload();
+    // Give the failure event a bounded chance to leave before navigation destroys this page.
+    void Sentry.flush(1500).finally(() => window.location.reload());
   }
 });
 

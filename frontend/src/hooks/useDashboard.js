@@ -1,23 +1,24 @@
+import { usePhotoUpdates } from './usePhotoUpdates';
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import {
   getSites, createSite, updateSite, deleteSite, getFloorplans, uploadFloorplan, deleteFloorplan,
-  getAllEquipment, getAllRooms, getAllTickets, updateEquipment, updateRoom, deleteEquipment, deleteRoom, deleteTicket,
-  updateFloorplan, replaceFloorplanFile, rescaleFloorplan, updateFloorplansSortOrder, bulkUpdateEquipment,
-    LOW_PRIORITY_CONFIG
+  getAllEquipment, getAllRooms, getAllTickets, updateEquipment, updateRoom, bulkUpdateRooms, deleteEquipment, deleteRoom, deleteTicket,
+  updateFloorplan, replaceFloorplanFile, rescaleFloorplan, updateFloorplansSortOrder, bulkUpdateEquipment, LOW_PRIORITY_CONFIG
 } from '../api';
 import { searchClientEntities } from '../searchEngine';
-
 import {
   getCachedDashboardData,
   setCachedDashboardData,
+  updateApiCacheUrl,
   updateCachedFloorplanItem,
   updateCachedSite,
   populateFloorplansIntoApiCache
 } from '../cacheUtils';
 import { floorplanLogger } from '../floorplanLogger';
+import { selectDashboardSite } from '../dashboardSite';
 
 const sharedCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
@@ -57,9 +58,7 @@ export function useDashboard() {
   const [allEquipment, setAllEquipment] = useState(() => getCachedDashboardData('equipment') || []);
   const [allRooms, setAllRooms] = useState(() => getCachedDashboardData('rooms') || []);
   const [allTickets, setAllTickets] = useState(() => getCachedDashboardData('tickets') || []);
-
-
-
+  usePhotoUpdates(setAllRooms, setAllEquipment);
   // Loading and background syncing states
   const [isLoadingSites, setIsLoadingSites] = useState(() => (getCachedDashboardData('sites') || []).length === 0);
   const [isLoadingFloorplans, setIsLoadingFloorplans] = useState(() => {
@@ -76,11 +75,6 @@ export function useDashboard() {
   const [isBackgroundSyncingEquipment, setIsBackgroundSyncingEquipment] = useState(false);
   const [isBackgroundSyncingRooms, setIsBackgroundSyncingRooms] = useState(false);
   const [isBackgroundSyncingTickets, setIsBackgroundSyncingTickets] = useState(false);
-  const [isBackgroundSyncing] = useState(false);
-
-
-
-
 
   // Selection state
   const [selectedEquipIds, setSelectedEquipIds] = useState([]);
@@ -203,22 +197,27 @@ export function useDashboard() {
 
   // --- Handlers & API functions first (Lexical declaration ordering) ---
 
+  const siteSelectionVersion = useRef(0);
+
+  const selectActiveSite = (site) => {
+    if (!site) return;
+    siteSelectionVersion.current += 1;
+    localStorage.setItem('lastActiveSiteId', site.id);
+    setActiveSite(site);
+  };
+
   const loadSites = async () => {
+    const selectionVersion = siteSelectionVersion.current;
     try {
       if (sites.length === 0) setIsLoadingSites(true);
       const res = await getSites();
       setSites(res.data);
       setCachedDashboardData('sites', res.data);
+      if (selectionVersion !== siteSelectionVersion.current) return;
 
       const siteIdParam = searchParams.get('siteId') || (typeof window !== 'undefined' ? localStorage.getItem('lastActiveSiteId') : null);
-      let targetSite = null;
-      if (siteIdParam) {
-        targetSite = res.data.find(s => s.id === parseInt(siteIdParam, 10));
-      }
-
-      if (!targetSite && res.data.length > 0 && !activeSite && !location.state?.restoreState) {
-        targetSite = res.data[0];
-      }
+      // Login restoration must still select a site when there is no saved selection.
+      const targetSite = selectDashboardSite(res.data, siteIdParam, activeSite?.id);
 
       if (targetSite) {
         if (!activeSite || activeSite.id !== targetSite.id) {
@@ -322,9 +321,6 @@ export function useDashboard() {
 
 
 
-
-
-
   // --- Effects below function declarations ---
 
   // Sync active site to query parameter siteId
@@ -370,7 +366,6 @@ export function useDashboard() {
     if (activeView === 'equipment') loadAllEquipment();
     if (activeView === 'rooms') loadAllRooms();
     if (activeView === 'tickets') loadAllTickets(allTickets.length > 0);
-
   }, [activeView]);
 
   // Sync activeView with route path transitions (back/forward, external navigation)
@@ -711,6 +706,8 @@ export function useDashboard() {
       navigate('/equipment');
     } else if (view === 'tickets') {
       navigate('/issues');
+    } else if (view === 'floorplans') {
+      navigate('/floorplans');
     } else {
       navigate('/');
     }
@@ -862,6 +859,34 @@ export function useDashboard() {
       console.error(error);
       alert(error.response?.data?.detail || 'Failed to save');
     }
+  };
+
+  const saveBulkRooms = async (ids, description) => {
+    const { data: updatedRooms } = await bulkUpdateRooms({ ids, description });
+    const updatedIds = new Set(updatedRooms.map(room => room.id));
+    const mergeDescriptions = rooms => Array.isArray(rooms)
+      ? rooms.map(room => updatedIds.has(room.id) ? { ...room, description } : room)
+      : null;
+
+    setAllRooms(prev => {
+      const next = mergeDescriptions(prev);
+      setCachedDashboardData('rooms', next);
+      return next;
+    });
+
+    const floorplanIds = new Set(updatedRooms.map(room => room.floorplan_id));
+    const siteIds = new Set(allRooms.filter(room => updatedIds.has(room.id) && room.site_id).map(room => room.site_id));
+    const mergeFloorplanRooms = floorplan => Array.isArray(floorplan?.rooms)
+      ? { ...floorplan, rooms: mergeDescriptions(floorplan.rooms) }
+      : floorplan;
+    await Promise.all([
+      updateApiCacheUrl('/api/rooms', mergeDescriptions),
+      ...Array.from(floorplanIds, id => updateApiCacheUrl(`/api/floorplans/${id}`, mergeFloorplanRooms)),
+      ...Array.from(floorplanIds, id => updateApiCacheUrl(`/api/floorplans/${id}/rooms`, mergeDescriptions)),
+      ...Array.from(siteIds, id => updateApiCacheUrl(`/api/sites/${id}/floorplans`, plans =>
+        Array.isArray(plans) ? plans.map(plan => floorplanIds.has(plan.id) ? mergeFloorplanRooms(plan) : plan) : null
+      )),
+    ]);
   };
 
   const handleDeleteRoom = async (id) => {
@@ -1097,7 +1122,7 @@ export function useDashboard() {
     isAdmin,
     sites,
     activeSite,
-    setActiveSite,
+    setActiveSite: selectActiveSite,
     floorplans,
     allEquipment,
     allRooms,
@@ -1115,17 +1140,12 @@ export function useDashboard() {
     isBackgroundSyncingFloorplans,
     isBackgroundSyncingEquipment,
     isBackgroundSyncingRooms,
-    isBackgroundSyncing,
 
 
     loadAllEquipment,
     loadAllRooms,
     loadFloorplans,
     loadSites,
-
-
-
-
     isSiteModalOpen,
     setIsSiteModalOpen,
     isRenameSiteModalOpen,
@@ -1233,6 +1253,7 @@ export function useDashboard() {
     handleDeleteEquip,
     startEditRoom,
     saveEditRoom,
+    saveBulkRooms,
     handleDeleteRoom,
     handleDeleteTicket,
     goToMap,

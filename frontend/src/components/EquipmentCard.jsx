@@ -1,3 +1,4 @@
+import EntityPhoto from './EntityPhoto';
 import {
   Map as MapIcon, Building,
   Check, X, Pencil, ExternalLink, Trash2,
@@ -57,9 +58,12 @@ export default function EquipmentCard({
               />
             </div>
           ) : (
+            <>
+            <EntityPhoto item={equip} kind="equipment" compact canEdit={isEditor} />
             <span className="table-mobile-card-title text-truncate">
               {equip.name}
             </span>
+            </>
           )}
         </div>
       </div>
@@ -68,14 +72,14 @@ export default function EquipmentCard({
       <div className="table-mobile-card-body">
         {isEditing ? (
           <>
-            <input
-              className="inline-edit-input"
+            <textarea aria-label="Description" rows={3}
+              className="input-field"
               value={editForm?.description || ''}
               onChange={e => setEditForm({ ...editForm, description: e.target.value })}
               placeholder="Description"
             />
-            <input
-              className="inline-edit-input"
+            <textarea aria-label="Tools required" rows={3}
+              className="input-field"
               value={editForm?.tools_required || ''}
               onChange={e => setEditForm({ ...editForm, tools_required: e.target.value })}
               placeholder="Tools Required"
@@ -97,14 +101,14 @@ export default function EquipmentCard({
         ) : (
           <>
             {equip.description && (
-              <div className="text-sm text-secondary line-clamp-2">
+              <div className="text-sm text-secondary equipment-multiline">
                 {equip.description}
               </div>
             )}
             {equip.tools_required && (
               <div className="items-center gap-xs text-xs text-muted">
                 <Wrench size={12} color="var(--text-secondary)" />
-                <span>Tools: <strong className="text-primary">{equip.tools_required}</strong></span>
+                <span>Tools: <strong className="text-primary equipment-multiline">{equip.tools_required}</strong></span>
               </div>
             )}
           </>

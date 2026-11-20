@@ -1,6 +1,7 @@
 import os
 import hashlib
 import logging
+import re
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,14 +13,14 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from limiter import limiter, rate_limit_exceeded_handler
 from swagger_custom import generate_custom_openapi, render_custom_swagger_ui_html, get_endpoints_summary_data
-from config import get_initial_admin_password, IS_PRODUCTION
+from config import CORS_ALLOWED_ORIGINS, get_initial_admin_password, IS_PRODUCTION
 
 from database import init_db
 import models
 from utils import check_etag_match, get_password_hash, UPLOAD_DIR
 
 # Import Routers
-from routers import users, sites, floorplans, rooms, equipment, tickets, audit_logs, search, sync, room_ocr
+from routers import floorplan_drawings, equipment_documents, data_manager, photos, users, sites, floorplans, rooms, equipment, tickets, audit_logs, search, sync, room_ocr
 
 import json
 
@@ -72,6 +73,13 @@ if SENTRY_DSN:
         profile_lifecycle="trace",
     )
 
+PUBLIC_API_READ = re.compile(
+    r"/api/(?:sites|rooms|equipment|tickets|search|endpoints-summary"
+    r"|sites/[0-9]+/floorplans|floorplans/[0-9]+(?:/(?:rooms|equipment|reference-points))?"
+    r"|equipment/[0-9]+/documents)/?"
+)
+
+
 class ETagMiddleware:
     def __init__(self, app) -> None:
         self.app = app
@@ -84,9 +92,19 @@ class ETagMiddleware:
         method = scope.get("method", "")
         path = scope.get("path", "")
 
-        # Only process GET requests to /api/ (excluding ChatGPT endpoints)
-        if method != "GET" or not path.startswith("/api/") or path.startswith("/api/chatgpt/"):
+        if not path.startswith("/api/"):
             await self.app(scope, receive, send)
+            return
+
+        if method != "GET" or not PUBLIC_API_READ.fullmatch(path):
+            async def send_private(message):
+                if message["type"] == "http.response.start":
+                    headers = MutableHeaders(scope=message)
+                    if "no-store" not in headers.get("cache-control", "").lower().split(", "):
+                        headers["Cache-Control"] = "private, no-store"
+                await send(message)
+
+            await self.app(scope, receive, send_private)
             return
 
         response_status = 200
@@ -213,11 +231,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Register Cors Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^https?://.*",
-    allow_credentials=True,
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
+    expose_headers=["ETag", "Content-Disposition", "Retry-After"],
 )
 
 # Register ETag Middleware
@@ -226,8 +243,16 @@ app.add_middleware(ETagMiddleware)
 class CachedStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope) -> Response:
         response = await super().get_response(path, scope)
+        if path.lower().endswith((".svg", ".svgz")):
+            response.headers["Content-Security-Policy"] = (
+                "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+            )
         if response.status_code == 200:
             response.headers["Cache-Control"] = "public, max-age=604800, stale-while-revalidate=86400"
+        if response.status_code == 200 and path.startswith('entity-photos/'):
+            response.headers['Cloudflare-CDN-Cache-Control'] = 'public, max-age=31536000, immutable'
+            response.headers['Cache-Control'] = ('no-store' if path.endswith('.preview.webp')
+                                                  else 'public, max-age=31536000, immutable')
         return response
 
 # Mount Uploads with browser cache headers for instant re-loads
@@ -237,9 +262,15 @@ app.mount("/uploads", CachedStaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.include_router(users.router)
 app.include_router(sites.router)
 app.include_router(floorplans.router)
+app.include_router(floorplan_drawings.router)
 app.include_router(room_ocr.router)
+app.include_router(data_manager.router)
+from routers import portable_exports
+app.include_router(portable_exports.router)
+app.include_router(photos.router)
 app.include_router(rooms.router)
 app.include_router(equipment.router)
+app.include_router(equipment_documents.router)
 app.include_router(tickets.router)
 app.include_router(audit_logs.router)
 app.include_router(search.router)
@@ -249,7 +280,11 @@ app.include_router(sync.router)
 async def startup_event():
     try:
         await init_db()
-        logger.info("Database initialized successfully")
+        from database import async_session_maker
+        from upload_index import reconcile
+        async with async_session_maker() as catalog_db:
+            count = await reconcile(catalog_db, UPLOAD_DIR)
+        logger.info("Database initialized; upload catalog reconciled (%s files)", count)
 
         # Create default admin user if none exists and allowed
         from database import async_session_maker
@@ -274,6 +309,8 @@ async def startup_event():
                     logger.warning("No users found in database. In production, initial admin auto-creation with default credentials is disabled. Set INITIAL_ADMIN_PASSWORD to bootstrap an admin user.")
     except Exception as e:
         logger.error(f"Error during database initialization: {e}")
+        if os.getenv("EQUIPMAP_PORTABLE") == "1":
+            raise
 
 @app.get("/health")
 async def health():

@@ -1,0 +1,12 @@
+.map-view-load-error-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.map-view-load-error-actions .btn {
+  min-height: var(--control-height-lg);
+}

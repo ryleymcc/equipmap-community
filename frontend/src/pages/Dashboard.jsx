@@ -130,6 +130,7 @@ export default function Dashboard() {
             isEditor={dashboard.isEditor}
             startEditRoom={dashboard.startEditRoom}
             saveEditRoom={dashboard.saveEditRoom}
+            saveBulkRooms={dashboard.saveBulkRooms}
             handleDeleteRoom={dashboard.handleDeleteRoom}
             goToMap={dashboard.goToMap}
             goToPlaceRoom={dashboard.goToPlaceRoom}
@@ -157,7 +158,6 @@ export default function Dashboard() {
             isBackgroundSyncing={dashboard.isBackgroundSyncingTickets}
           />
         )}
-
 
       </div>
 

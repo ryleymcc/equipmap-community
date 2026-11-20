@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../AuthContext';
+import { useState } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { canManageEquipMapItems, useAuth } from '../AuthContext';
 import { Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { getErrorMessage } from '../api';
 import './Login.css';
@@ -28,7 +28,7 @@ const Login = () => {
 
       const requiredRole = location.state?.requiredRole;
       const isAdmin = Boolean(user && (user.role === 'admin' || user.is_admin));
-      const isEditor = Boolean(isAdmin || (user && (user.can_manage_items !== false || user.role === 'editor')));
+      const isEditor = canManageEquipMapItems(user);
 
       let hasPermission = true;
       if (requiredRole === 'admin' && !isAdmin) hasPermission = false;
@@ -126,9 +126,10 @@ const Login = () => {
         </form>
 
         <div className="login-footer">
-          <button onClick={() => navigate('/')} className="back-link">
+          <Link to="/" className="btn btn-full login-viewer-button">
+            <Eye size={18} aria-hidden="true" />
             Continue as Viewer
-          </button>
+          </Link>
           <button onClick={() => window.open('https://ryleymcc.github.io/equipmap-promo/', '_blank')} className="back-link secondary">
             Learn more about our features
           </button>

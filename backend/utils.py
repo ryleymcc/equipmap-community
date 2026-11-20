@@ -12,9 +12,10 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
 from sqlalchemy.future import select
-from sqlalchemy import text
+from sqlalchemy import text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from database import get_db
 import models
@@ -31,6 +32,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 from config import get_secret_key
 SECRET_KEY = get_secret_key()
 ALGORITHM = "HS256"
+JWT_ISSUER = os.getenv("JWT_ISSUER", "equipmap")
+JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "equipmap-api")
 # Access token: default 30 minutes for SOC 2 compliance
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 # Refresh token: default 7 days with continuous rotation
@@ -48,22 +51,32 @@ def get_password_hash(password: str) -> str:
 def hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None, token_version: int = 1) -> str:
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    jti = str(uuid.uuid4())
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "jti": jti,
-        "token_version": token_version,
-        "type": "access"
-    })
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+def create_access_token(user_id: int, expires_delta: Optional[timedelta] = None, token_version: int = 1) -> str:
+    if type(user_id) is not int or not 0 < user_id <= 2147483647:
+        raise ValueError("Access tokens require a positive immutable user ID")
+    now = datetime.now(timezone.utc)
+    claims = {
+        "sub": str(user_id), "exp": now + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)),
+        "iat": now, "jti": str(uuid.uuid4()), "token_version": token_version,
+        "type": "access", "iss": JWT_ISSUER, "aud": JWT_AUDIENCE,
+    }
+    return jwt.encode(claims, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_access_token(token: str) -> schemas.AccessTokenClaims:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM],
+            issuer=JWT_ISSUER, audience=JWT_AUDIENCE,
+            options={"require": ["sub", "exp", "iat", "jti", "token_version", "type", "iss", "aud"], "strict_aud": True})
+        claims = schemas.AccessTokenClaims.model_validate(payload)
+        if int(claims.sub) > 2147483647 or claims.exp <= claims.iat:
+            raise ValueError("Invalid token identity or lifetime")
+        return claims
+    except (InvalidTokenError, ValidationError, ValueError, TypeError, OverflowError) as error:
+        logger.warning("Access token validation failed: %s", type(error).__name__)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"})
+
 
 async def create_refresh_token(
     user_id: int,
@@ -113,7 +126,7 @@ async def rotate_refresh_token(
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    user_result = await db.execute(select(models.User).where(models.User.id == db_token.user_id))
+    user_result = await db.execute(select(models.User).where(models.User.id == db_token.user_id).with_for_update().execution_options(populate_existing=True))
     user = user_result.scalars().first()
 
     if not user or not user.is_active:
@@ -122,6 +135,12 @@ async def rotate_refresh_token(
             detail="User account is inactive or not found",
             headers={"WWW-Authenticate": "Bearer"}
         )
+
+    db_token = (await db.execute(select(models.RefreshToken).where(
+        models.RefreshToken.token_hash == token_hash_val
+    ).with_for_update().execution_options(populate_existing=True))).scalars().first()
+    if db_token is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     # REPLAY ATTACK DETECTION (SOC 2 CC6.1 / CC6.2)
     # If this refresh token was already revoked, someone may have intercepted/replayed it.
@@ -137,7 +156,7 @@ async def rotate_refresh_token(
 
     now = datetime.utcnow()
     expires_at = db_token.expires_at.replace(tzinfo=None) if (db_token.expires_at and db_token.expires_at.tzinfo) else db_token.expires_at
-    if expires_at and expires_at < now:
+    if expires_at is None or expires_at <= now:
         db_token.revoked_at = now
         await db.commit()
         raise HTTPException(
@@ -148,7 +167,7 @@ async def rotate_refresh_token(
 
     # Check token version against user token version
     current_version = user.token_version or 1
-    if db_token.token_version < current_version:
+    if db_token.token_version != current_version:
         db_token.revoked_at = now
         await db.commit()
         raise HTTPException(
@@ -174,7 +193,7 @@ async def rotate_refresh_token(
     db.add(new_db_refresh)
 
     access_token = create_access_token(
-        data={"sub": user.username},
+        user_id=user.id,
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         token_version=current_version
     )
@@ -183,7 +202,11 @@ async def rotate_refresh_token(
 
 async def revoke_user_sessions(user: models.User, db: AsyncSession, reason: str = "session_revocation") -> int:
     now = datetime.utcnow()
-    user.token_version = (user.token_version or 1) + 1
+    # Atomic increment also locks the user before touching refresh rows, matching
+    # rotation's lock order and preventing stale ORM state losing a revocation.
+    user.token_version = (await db.execute(update(models.User).where(models.User.id == user.id)
+        .values(token_version=models.User.token_version + 1)
+        .returning(models.User.token_version))).scalar_one()
 
     # Revoke all active refresh tokens for this user
     refresh_tokens_res = await db.execute(
@@ -202,93 +225,56 @@ async def revoke_user_sessions(user: models.User, db: AsyncSession, reason: str 
 
 async def revoke_access_token(token: str, db: AsyncSession, reason: str = "logout") -> None:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        jti = payload.get("jti")
-        exp = payload.get("exp")
-        username = payload.get("sub")
+        claims = decode_access_token(token)
+    except HTTPException:
+        # Invalid/expired access tokens grant no access; a supplied refresh token
+        # can still be revoked by the logout route.
+        return
+    try:
+        user_id = (await db.execute(select(models.User.id).where(models.User.id == int(claims.sub)))).scalar()
+        upsert = pg_insert
+        if db.bind.dialect.name == 'sqlite':
+            from sqlalchemy.dialects.sqlite import insert as upsert
+        await db.execute(upsert(models.RevokedToken).values(jti=claims.jti, user_id=user_id,
+            expires_at=datetime.fromtimestamp(claims.exp, tz=timezone.utc), reason=reason
+        ).on_conflict_do_nothing(index_elements=["jti"]))
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=503, detail="Session revocation is unavailable")
 
-        if jti:
-            expires_at = datetime.fromtimestamp(exp, tz=timezone.utc) if exp else datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-            user_id = None
-            if username:
-                u_res = await db.execute(select(models.User.id).where(models.User.username == username))
-                user_id = u_res.scalar()
-
-            revoked_entry = models.RevokedToken(
-                jti=jti,
-                user_id=user_id,
-                expires_at=expires_at,
-                reason=reason
-            )
-            db.add(revoked_entry)
-            await db.commit()
-    except Exception as e:
-        logger.warning(f"Could not blacklist access token: {e}")
 
 async def revoke_refresh_token_string(raw_token: str, db: AsyncSession) -> bool:
     if not raw_token:
         return False
     try:
-        token_hash_val = hash_token(raw_token)
-        result = await db.execute(select(models.RefreshToken).where(models.RefreshToken.token_hash == token_hash_val))
+        result = await db.execute(select(models.RefreshToken).where(
+            models.RefreshToken.token_hash == hash_token(raw_token)).with_for_update())
         db_token = result.scalars().first()
         if db_token and db_token.revoked_at is None:
             db_token.revoked_at = datetime.utcnow()
             await db.commit()
             return True
-    except Exception as e:
-        logger.warning(f"Failed to revoke refresh token: {e}")
-    return False
+        return False
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=503, detail="Session revocation is unavailable")
+
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> Optional[models.User]:
     if not token:
         return None
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        jti: Optional[str] = payload.get("jti")
-        token_version: int = payload.get("token_version", 1)
-        if username is None:
-            raise credentials_exception
-        token_data = schemas.TokenData(username=username, token_version=token_version, jti=jti)
-    except InvalidTokenError as exc:
-        logger.warning("Access token rejected: %s", type(exc).__name__)
-        raise credentials_exception
-
-    # Check if individual access token JTI was revoked (e.g. via explicit logout)
-    if token_data.jti:
-        revoked_res = await db.execute(
-            select(models.RevokedToken).where(models.RevokedToken.jti == token_data.jti)
-        )
-        if revoked_res.scalars().first():
-            logger.warning(f"Access attempt with revoked token JTI {token_data.jti}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has been revoked",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-    result = await db.execute(select(models.User).where(models.User.username == token_data.username))
-    user = result.scalars().first()
-    if user is None:
-        raise credentials_exception
-
-    # Verify token version matches user's current token version (instant offboarding / session revocation)
-    current_user_version = user.token_version if getattr(user, "token_version", None) is not None else 1
-    if token_data.token_version < current_user_version:
-        logger.warning(f"Access attempt with outdated token version ({token_data.token_version} < {current_user_version}) for user {user.username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session has been revoked or invalidated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
+    claims = decode_access_token(token)
+    revoked = (await db.execute(select(models.RevokedToken.id).where(models.RevokedToken.jti == claims.jti))).first()
+    if revoked:
+        raise HTTPException(status_code=401, detail="Token has been revoked", headers={"WWW-Authenticate": "Bearer"})
+    user = (await db.execute(select(models.User).where(models.User.id == int(claims.sub)))).scalars().first()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail="User account is inactive or not found", headers={"WWW-Authenticate": "Bearer"})
+    if claims.token_version != user.token_version:
+        raise HTTPException(status_code=401, detail="Session has been revoked or invalidated", headers={"WWW-Authenticate": "Bearer"})
     return user
+
 
 async def get_current_active_user(current_user: models.User = Depends(get_current_user)) -> Optional[models.User]:
     if current_user is None:
