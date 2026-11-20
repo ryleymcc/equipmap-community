@@ -3,6 +3,7 @@ import csv
 import base64
 import io
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -93,6 +94,7 @@ def scan(path, dpi, progress):
                 output = subprocess.run(
                     ['tesseract', 'stdin', 'stdout', '-l', 'eng', '--psm', '11', 'tsv'],
                     input=pix.tobytes('png'), capture_output=True, timeout=60, check=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
                 )
                 for word in csv.DictReader(io.StringIO(output.stdout.decode()), delimiter='\t', quoting=csv.QUOTE_NONE):
                     name = word.get('text', '').strip().strip('.,:;()[]')

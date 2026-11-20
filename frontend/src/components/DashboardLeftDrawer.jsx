@@ -130,13 +130,15 @@ export default function DashboardLeftDrawer({
             <span>Issues</span>
           </button>
 
-          <button
-            className={`drawer-nav-item ${activeView === 'audit-log' || activeView === 'audit-history' ? 'active' : ''}`}
-            onClick={() => onNav('audit-log')}
-          >
-            <HistoryIcon size={20} className="nav-icon" />
-            <span>Audit History</span>
-          </button>
+          {auth?.isEditor && (
+            <button
+              className={`drawer-nav-item ${activeView === 'audit-log' || activeView === 'audit-history' ? 'active' : ''}`}
+              onClick={() => onNav('audit-log')}
+            >
+              <HistoryIcon size={20} className="nav-icon" />
+              <span>Data &amp; History</span>
+            </button>
+          )}
 
 
           {isAdmin && (

@@ -1,5 +1,3 @@
-import os
-import shutil
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Request, Response
 from sqlalchemy.future import select
@@ -11,6 +9,7 @@ from database import get_db
 import models
 import schemas
 from utils import require_editor, log_action, delete_db_object, check_etag_match, respond_304, UPLOAD_DIR
+from photo_pipeline import save_photo
 
 router = APIRouter(tags=["equipment"])
 
@@ -47,10 +46,7 @@ async def create_equipment(
 
     photo_path = None
     if photo:
-        photo_loc = os.path.join(UPLOAD_DIR, photo.filename)
-        with open(photo_loc, "wb") as buffer:
-            shutil.copyfileobj(photo.file, buffer)
-        photo_path = f"/uploads/{photo.filename}"
+        photo_path = await save_photo(photo, UPLOAD_DIR)
 
     db_equip = models.Equipment(
         floorplan_id=floorplan_id,
@@ -115,7 +111,7 @@ async def bulk_update_equipment(
     await db.commit()
     return {"status": "success", "updated": len(update_data.ids)}
 
-@router.put("/api/equipment/{equipment_id}")
+@router.put("/api/equipment/{equipment_id}", response_model=schemas.Equipment)
 async def update_equipment(
     equipment_id: int,
     request: Request,
@@ -241,6 +237,7 @@ async def get_all_equipment(request: Request, response: Response, db: AsyncSessi
             "floorplan_id": e.floorplan_id,
             "name": e.name,
             "description": e.description,
+            "photo_thumbnail_path": e.photo_thumbnail_path,
             "x_coordinate": e.x_coordinate,
             "y_coordinate": e.y_coordinate,
             "color": e.color,

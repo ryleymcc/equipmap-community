@@ -1,0 +1,139 @@
+.drawing-layers-trigger {
+  position: fixed;
+  top: calc(var(--control-height-lg) + var(--space-8));
+  right: var(--space-5);
+  z-index: 100;
+}
+
+.drawing-layers-panel {
+  position: fixed;
+  top: calc(var(--control-height-lg) * 2 + var(--space-8) + var(--space-3));
+  right: var(--space-5);
+  bottom: var(--space-5);
+  width: min(380px, calc(100% - var(--space-5) * 2));
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-elevated);
+}
+.drawing-layers-header, .drawing-layers-footer { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: var(--space-3); padding: var(--space-4) var(--space-5); }
+.drawing-layers-header { border-bottom: 1px solid var(--surface-border); }
+.drawing-layers-header h2, .drawing-form h2 { font-size: var(--font-size-modal-title); }
+.drawing-layers-footer { border-top: 1px solid var(--surface-border); }
+.drawing-layers-body { display: flex; flex-direction: column; gap: var(--space-6); overflow-y: auto; padding: var(--space-5); min-height: 0; flex: 1; }
+.drawing-layers-body[hidden] { display: none; }
+.drawing-controls-collapsed { top: auto; height: auto; }
+.drawing-layers-body .equip-field > label, .drawing-form .equip-field > label { font-size: var(--font-size-label); font-weight: var(--font-weight-semibold); color: var(--text-secondary); }
+.drawing-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4) var(--space-5); }
+.drawing-form-grid > *, .drawing-layers-body .input-field { min-width: 0; }
+.drawing-note { font-size: var(--font-size-label); color: var(--text-secondary); overflow-wrap: anywhere; }
+.drawing-sheet-list { display: flex; flex-direction: column; }
+.drawing-sheet-row { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; padding: var(--space-4); text-align: left; background: transparent; color: var(--text-primary); border: 1px solid transparent; border-bottom-color: var(--surface-border); font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.drawing-sheet-row:hover { background: var(--surface-card); }
+.drawing-sheet-row-selected { border-color: var(--primary-border); border-radius: var(--radius-md); background: var(--primary-subtle); }
+.drawing-sheet-status { color: var(--warning-color); font-size: var(--font-size-label); }
+.drawing-selection { display: flex; flex-direction: column; gap: var(--space-4); border-top: 1px solid var(--surface-border); padding-top: var(--space-5); }
+.drawing-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.drawing-overlap { display: flex; align-items: center; gap: var(--space-2); color: var(--warning-color); font-size: var(--font-size-label); }
+.drawing-crop summary { cursor: pointer; font-size: var(--font-size-label); color: var(--text-secondary); }
+.drawing-crop[open] .drawing-form-grid { margin-top: var(--space-4); }
+.drawing-delete-confirm, .drawing-location-filter { display: flex; flex-direction: column; gap: var(--space-4); }
+.drawing-viewing-label { position: fixed; bottom: var(--space-5); left: var(--space-5); max-width: calc(100% - var(--space-5) * 2); z-index: 90; border: 1px solid var(--surface-border); border-radius: var(--radius-md); background: var(--surface-color); color: var(--text-primary); padding: var(--space-3) var(--space-4); font-size: var(--font-size-label); overflow-wrap: anywhere; }
+.drawing-viewing-label { display: flex; align-items: center; gap: var(--space-3); }
+.drawing-viewing-opacity { flex: 1; min-width: 0; }
+.drawing-viewing-label { width: calc(var(--control-height-lg) * 7); }
+.drawing-load-status:not(:empty) { display: flex; align-items: center; gap: var(--space-2); }
+.drawing-load-status svg { flex-shrink: 0; }
+.drawing-layers-panel > .drawing-load-status:not(:empty) { flex-shrink: 0; padding: var(--space-3) var(--space-5); }
+.drawing-load-status:empty { position: absolute; }
+.drawing-load-error { display: grid; justify-items: start; gap: var(--space-2); }
+.drawing-layers-panel > .drawing-load-error { flex-shrink: 0; padding: var(--space-3) var(--space-5); }
+@media (prefers-reduced-motion: reduce) { .drawing-load-status .spinning { animation: none; } }
+.drawing-form { margin: auto; padding: 0; color: var(--text-primary); max-height: calc(100dvh - var(--space-8)); }
+.drawing-form[open] { display: flex; flex-direction: column; }
+.drawing-form::backdrop { background: var(--bg-darker); opacity: 0.8; }
+.drawing-form .modal-card-body { min-height: 0; overflow-y: auto; }
+.drawing-form .modal-card-header, .drawing-form .modal-card-footer { flex-shrink: 0; }
+.drawing-form .modal-card-footer { justify-content: flex-end; }
+.drawing-layers-panel button:focus-visible, .drawing-layers-panel input:focus-visible, .drawing-layers-panel select:focus-visible, .drawing-form :focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+.drawing-layers-panel input[type='range'], .drawing-viewing-opacity input { width: 100%; accent-color: var(--primary-color); min-height: var(--control-height-md); }
+.drawing-map-surface, .drawing-map-clip { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.drawing-map-surface { z-index: 5; }
+.drawing-map-sheet { position: absolute; width: 100%; transform-origin: top left; pointer-events: none; }
+.drawing-map-sheet-content { mix-blend-mode: multiply; }
+.drawing-map-sheet-content.drawing-match-source-hidden { visibility: hidden; }
+.drawing-map-sheet-content.drawing-match-source { mix-blend-mode: normal; background: var(--text-primary); }
+.drawing-match-output { position: absolute; inset: 0; width: 100%; height: 100%; mix-blend-mode: multiply; pointer-events: none; }
+.drawing-match-overview { display: block; width: 100%; height: 100%; }
+.drawing-match-detail { position: absolute; visibility: hidden; }
+.drawing-match-output[data-detail='ready'] .drawing-match-overview { visibility: hidden; }
+.drawing-match-output[data-detail='ready'] .drawing-match-detail { visibility: visible; }
+.drawing-match-marker {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: var(--control-height-lg);
+  height: var(--control-height-lg);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-full);
+  color: var(--text-inverse);
+  pointer-events: auto;
+  cursor: pointer;
+  transform-origin: top left;
+  transform: scale(calc(1 / var(--drawing-view-scale, 1))) translate(-50%, -50%);
+}
+.drawing-match-marker > span {
+  display: grid;
+  place-items: center;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  border: 2px solid var(--text-primary);
+  border-radius: var(--radius-full);
+  background: var(--primary-color);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-bold);
+}
+.drawing-match-marker-delete { z-index: 2; }
+.drawing-match-marker-delete > span { background: var(--danger-color); }
+.drawing-match-marker:focus-visible { outline: 2px solid var(--primary-color); }
+.drawing-match-marker-on-sheet {
+  transform: rotate(calc(-1 * var(--drawing-rotation, 0deg))) scale(calc(1 / (var(--drawing-view-scale, 1) * var(--drawing-local-scale, 1)))) translate(-50%, -50%);
+}
+.drawing-match-controls { display: grid; gap: var(--space-4); }
+.drawing-match-step { padding: var(--space-3) var(--space-5); }
+.drawing-map-sheet.drawing-match-picking { pointer-events: auto; cursor: crosshair; }
+.drawing-map-sheet-moving { pointer-events: auto; cursor: move; touch-action: none; }
+.drawing-map-sheet-comparison { outline: var(--space-1) dashed var(--warning-color); }
+.drawing-map-image { display: block; width: 100%; height: auto; }
+.drawing-map-coverage { position: absolute; border: 2px dashed var(--text-secondary); pointer-events: none; }
+.drawing-map-coverage-selected { border: 3px solid var(--primary-color); }
+.drawing-map-coverage-comparison { border: 3px dashed var(--warning-color); }
+.drawing-map-coverage button { position: absolute; top: 0; left: 0; min-height: var(--control-height-lg); max-width: 100%; border: 1px solid var(--primary-border); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); background: var(--surface-color); color: var(--text-primary); font: var(--font-size-label) var(--font-family-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto; cursor: pointer; transform-origin: top left; transform: scale(calc(1 / var(--drawing-view-scale, 1))); }
+.drawing-map-coverage button:focus-visible { outline: 3px solid var(--primary-color); outline-offset: var(--space-1); }
+.drawing-map-surface-editing, .drawing-map-clip-editing { overflow: visible; }
+.drawing-mode-button[aria-pressed='true'] { background: var(--primary-subtle); border-color: var(--primary-border); }
+.drawing-region-editor, .drawing-region-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.drawing-region-svg { overflow: visible; }
+.drawing-region-outside { fill: var(--bg-darker); opacity: 0.2; }
+.drawing-region-boundary { fill: var(--primary-subtle); stroke: var(--primary-color); stroke-width: 2; }
+.drawing-region-handle { position: absolute; width: var(--control-height-lg); height: var(--control-height-lg); min-height: var(--control-height-lg); padding: 0; display: grid; place-items: center; background: transparent; border: 0; color: var(--text-inverse); font: var(--font-weight-semibold) var(--font-size-label) var(--font-family-ui); pointer-events: auto; cursor: move; touch-action: none; transform-origin: top left; transform: rotate(calc(-1 * var(--drawing-rotation, 0deg))) scale(calc(1 / (var(--drawing-view-scale, 1) * var(--drawing-local-scale, 1)))) translate(-50%, -50%); }
+.drawing-region-handle::before { content: ''; position: absolute; inset: var(--space-3); background: var(--primary-color); border: 2px solid var(--text-primary); border-radius: var(--radius-full); }
+.drawing-region-handle > span { position: relative; }
+.drawing-region-handle:focus-visible { outline: 2px solid var(--primary-color); outline-offset: var(--space-1); }
+.drawing-region-caption { position: absolute; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--surface-color); color: var(--text-primary); white-space: nowrap; font-size: var(--font-size-label); transform-origin: top left; transform: rotate(calc(-1 * var(--drawing-rotation, 0deg))) scale(calc(1 / (var(--drawing-view-scale, 1) * var(--drawing-local-scale, 1)))) translate(var(--space-5), calc(-1 * var(--control-height-lg))); }
+.drawing-map-status { position: absolute; top: var(--space-4); left: var(--space-4); padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-color); color: var(--text-primary); font-size: var(--font-size-body); pointer-events: auto; }
+.drawing-map-status button { color: var(--text-primary); background: transparent; border: 1px solid var(--surface-border); padding: var(--space-2); font: inherit; }
+
+@media (max-width: 700px) {
+  .drawing-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .drawing-layers-panel { top: auto; max-height: 52dvh; bottom: max(var(--space-3), env(safe-area-inset-bottom)); left: var(--space-3); right: var(--space-3); width: auto; }
+  .drawing-layers-header, .drawing-layers-footer { padding: var(--space-3) var(--space-4); }
+  .drawing-layers-panel .btn, .drawing-layers-panel .input-field, .drawing-form .btn, .drawing-form .input-field { min-height: var(--control-height-lg); }
+  .drawing-viewing-label { top: auto; bottom: max(var(--space-3), env(safe-area-inset-bottom)); left: var(--space-3); right: var(--space-3); }
+  .drawing-viewing-label .btn, .drawing-viewing-opacity input { min-height: var(--control-height-lg); }
+  .drawing-form { max-width: calc(100% - var(--space-5)); max-height: calc(100dvh - var(--space-5)); }
+}

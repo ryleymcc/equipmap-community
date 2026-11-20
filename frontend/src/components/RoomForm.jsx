@@ -1,6 +1,6 @@
+import EntityPhoto from './EntityPhoto';
 import { useRef } from 'react';
 import { MapPin, Trash2, Check } from 'lucide-react';
-
 
 export function RoomForm({
   editingRoom,
@@ -146,7 +146,7 @@ export function RoomForm({
         {!isMobile && actionButtons}
       </form>
 
-
+      {isEditing && <EntityPhoto item={editingRoom} kind="rooms" canEdit={isEditor} />}
     </div>
   );
 }

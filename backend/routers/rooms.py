@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from sqlalchemy import text, update
 
 from database import get_db
 import models
@@ -26,6 +26,33 @@ async def create_room(room: schemas.RoomCreate, db: AsyncSession = Depends(get_d
     await log_action(db, "create", "room", db_room.id, db_room.name, new_values=room.model_dump(), message=f"Created room '{db_room.name}'", user=current_user)
     await db.commit()
     return db_room
+
+@router.put("/api/rooms/bulk", response_model=List[schemas.Room])
+async def bulk_update_rooms(
+    room_data: schemas.RoomBulkUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(require_editor),
+):
+    room_ids = set(room_data.ids)
+    result = await db.execute(
+        update(models.Room)
+        .where(models.Room.id.in_(room_ids))
+        .values(description=room_data.description)
+        .returning(models.Room)
+    )
+    updated_rooms = result.scalars().all()
+    if len(updated_rooms) != len(room_ids):
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="A selected room no longer exists. Refresh the room list and try again.")
+
+    await log_action(
+        db, "bulk_update", "room",
+        new_values={"ids": sorted(room_ids), "description": room_data.description},
+        message=f"Bulk updated the description of {len(room_ids)} rooms",
+        user=current_user,
+    )
+    await db.commit()
+    return updated_rooms
 
 @router.put("/api/rooms/{room_id}", response_model=schemas.Room)
 async def update_room(room_id: int, room_data: schemas.RoomUpdate, db: AsyncSession = Depends(get_db), current_user: models.User = Depends(require_editor)):
@@ -76,6 +103,8 @@ async def get_all_rooms(request: Request, response: Response, db: AsyncSession =
             "floorplan_id": r.floorplan_id,
             "name": r.name,
             "description": r.description,
+            "photo_thumbnail_path": r.photo_thumbnail_path,
+            "photo_path": r.photo_path,
             "x_coordinate": r.x_coordinate,
             "y_coordinate": r.y_coordinate,
             "floorplan_name": r.floorplan.name if r.floorplan else "",

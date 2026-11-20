@@ -1,0 +1,100 @@
+.map-pin-visibility.trigger-btn {
+  --pin-visibility-width: calc(var(--control-height-lg) * 5 + var(--space-5));
+  --pin-visibility-duration: 180ms;
+  position: fixed;
+  top: calc(var(--space-5) + var(--control-height-lg) + var(--space-4));
+  left: var(--space-5);
+  z-index: 50;
+  width: var(--control-height-lg);
+  height: var(--control-height-lg);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  transition: width var(--pin-visibility-duration) ease, background-color var(--pin-visibility-duration) ease;
+}
+
+.map-pin-visibility.trigger-btn:hover {
+  transform: none;
+  background: var(--glass-surface);
+}
+
+.map-pin-visibility.trigger-btn[data-open="true"] {
+  width: var(--pin-visibility-width);
+  background: var(--surface-elevated);
+}
+
+.map-pin-visibility[data-open="false"][data-mode="names"] {
+  background: var(--primary-active);
+}
+
+.map-pin-visibility-trigger,
+.map-pin-visibility-options {
+  position: absolute;
+  inset: 0 auto 0 0;
+}
+
+.map-pin-visibility-trigger {
+  display: grid;
+  place-items: center;
+  width: 100%;
+}
+
+.map-pin-visibility button {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.map-pin-visibility button:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: calc(-1 * var(--space-1));
+}
+
+.map-pin-visibility-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: calc(var(--pin-visibility-width) - 2px);
+  transition: opacity var(--pin-visibility-duration) ease;
+}
+
+.map-pin-visibility [inert] {
+  opacity: 0;
+}
+
+.map-pin-visibility-options button {
+  position: relative;
+  font: inherit;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.map-pin-visibility-options button:hover {
+  background: var(--surface-card);
+}
+
+.map-pin-visibility-selection {
+  position: absolute;
+  inset: var(--space-1) auto var(--space-1) 0;
+  width: calc(100% / 3);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-full);
+  background: var(--primary-subtle);
+  transition: transform var(--pin-visibility-duration) ease;
+}
+
+.map-pin-visibility[data-mode="pins"] .map-pin-visibility-selection {
+  transform: translateX(100%);
+}
+
+.map-pin-visibility[data-mode="names"] .map-pin-visibility-selection {
+  transform: translateX(200%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-pin-visibility.trigger-btn {
+    --pin-visibility-duration: 0ms;
+  }
+}

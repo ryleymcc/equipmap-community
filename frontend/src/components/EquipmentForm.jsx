@@ -1,3 +1,5 @@
+import EquipmentDocuments from './EquipmentDocuments';
+import EntityPhoto from './EntityPhoto';
 import { useRef } from 'react';
 import { MapPin, Trash2, Check } from 'lucide-react';
 import { COLORS } from '../mapConstants';
@@ -143,14 +145,14 @@ export function EquipmentForm({
           <div className="input-group">
             <label>Description</label>
             {isEditing ? (
-              <input
+              <textarea aria-label="Description" rows={3}
                 name="description"
                 defaultValue={editingEquipment.description}
                 className={`input-field ${!isEditor ? 'input-readonly-plain' : ''}`}
                 readOnly={!isEditor}
               />
             ) : (
-              <input ref={equipDescRef} className="input-field" />
+              <textarea aria-label="Description" rows={3} ref={equipDescRef} className="input-field" />
             )}
           </div>
         )}
@@ -158,7 +160,7 @@ export function EquipmentForm({
           <div className="input-group">
             <label>Tools Required</label>
             {isEditing ? (
-              <input
+              <textarea aria-label="Tools required" rows={3}
                 name="tools_required"
                 defaultValue={editingEquipment.tools_required}
                 className={`input-field ${!isEditor ? 'input-readonly-plain' : ''}`}
@@ -166,7 +168,7 @@ export function EquipmentForm({
                 readOnly={!isEditor}
               />
             ) : (
-              <input name="tools_required" className="input-field" placeholder="e.g. Screwdriver, Drill" />
+              <textarea aria-label="Tools required" rows={3} name="tools_required" className="input-field" placeholder="e.g. Screwdriver, Drill" />
             )}
           </div>
         )}
@@ -193,7 +195,8 @@ export function EquipmentForm({
         {!isMobile && actionButtons}
       </form>
 
-
+      {isEditing && <EquipmentDocuments item={editingEquipment} canEdit={isEditor} />}
+      {isEditing && <EntityPhoto item={editingEquipment} kind="equipment" canEdit={isEditor} />}
     </div>
   );
 }

@@ -8,6 +8,16 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("APP_ENV", "development")).lowe
 IS_PRODUCTION = ENVIRONMENT in ("production", "prod")
 IS_TEST = ENVIRONMENT in ("test", "testing")
 
+# Same-origin deployments need no CORS entries. Keep the local Vite origins
+# available by default for development setups that use a separate API port.
+_default_cors_origins = (
+    "http://localhost:5173,http://127.0.0.1:5173" if ENVIRONMENT == "development" else ""
+)
+CORS_ALLOWED_ORIGINS = [
+    origin for value in os.getenv("CORS_ALLOWED_ORIGINS", _default_cors_origins).split(",")
+    if (origin := value.strip()).startswith(("https://", "http://"))
+]
+
 # Known insecure/default secrets and placeholders
 INSECURE_SECRET_KEYS = {
     "your-secret-key-change-it-in-production",
@@ -18,6 +28,8 @@ INSECURE_SECRET_KEYS = {
     "admin",
     "123456",
     "default-secret-key",
+    "dev-insecure-secret-key-only-for-local-testing-do-not-use-in-production",
+    "your-secure-random-secret-key-at-least-32-chars-long",
 }
 
 # Known default database passwords / placeholders
@@ -112,7 +124,10 @@ def get_initial_admin_password() -> str | None:
     Retrieve optional initial admin password for bootstrapping.
     In production, returns None if not explicitly configured or if set to an insecure default.
     """
-    admin_pw = os.getenv("INITIAL_ADMIN_PASSWORD", os.getenv("ADMIN_PASSWORD", "")).strip()
+    admin_pw = os.getenv("INITIAL_ADMIN_PASSWORD", os.getenv("ADMIN_PASSWORD", ""))
+    if os.getenv("EQUIPMAP_PORTABLE") == "1":
+        return admin_pw or None
+    admin_pw = admin_pw.strip()
     if IS_PRODUCTION:
         if not admin_pw or admin_pw.lower() in ("admin", "password", "123456", "changeme"):
             return None

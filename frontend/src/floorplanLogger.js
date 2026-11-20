@@ -1,4 +1,5 @@
 import { trackPageLoadTime } from './metrics';
+import { captureDiagnostic, diagnosticBreadcrumb } from './diagnostics.js';
 
 class FloorplanTimingLogger {
   constructor() {
@@ -36,6 +37,7 @@ class FloorplanTimingLogger {
       totalTime: null,
       completed: false
     };
+    diagnosticBreadcrumb('Floorplan switch started', { floorplan_id: fpIdStr, source });
 
     console.log(
       `%c⏱️ [Floorplan Switch] Started -> "${this.currentSwitch.floorplanName}" (ID: ${floorplanId}) [Trigger: ${source}]`,
@@ -94,6 +96,7 @@ class FloorplanTimingLogger {
    * Record when floorplan asset (PDF, Image, 3D GLB) fetching/rendering starts.
    */
   recordAssetStart(floorplanId, { fileType = 'unknown', filePath = '' } = {}) {
+    diagnosticBreadcrumb('Floorplan asset started', { floorplan_id: floorplanId, file_type: fileType, file_path: filePath });
     this.ensureSwitch(floorplanId);
     if (this.currentSwitch && this.currentSwitch.floorplanId === String(floorplanId)) {
       // Only set if not already set for this switch
@@ -114,6 +117,7 @@ class FloorplanTimingLogger {
    * Record when PDF document file has been parsed by pdf.js worker.
    */
   recordPdfDocParsed(floorplanId, { numPages = 1 } = {}) {
+    diagnosticBreadcrumb('Floorplan PDF parsed', { floorplan_id: floorplanId, pages: numPages });
     if (this.currentSwitch && this.currentSwitch.floorplanId === String(floorplanId) && this.currentSwitch.assetStartTime) {
       if (!this.currentSwitch.assetDocParsedTime) {
         const now = performance.now();
@@ -131,6 +135,7 @@ class FloorplanTimingLogger {
    * Record when asset rendering onto screen/canvas has succeeded.
    */
   recordAssetSuccess(floorplanId, { fileType = null, extraInfo = '' } = {}) {
+    diagnosticBreadcrumb('Floorplan asset ready', { floorplan_id: floorplanId, file_type: fileType });
     if (this.currentSwitch && this.currentSwitch.floorplanId === String(floorplanId)) {
       if (this.currentSwitch.completed) return; // already finished
 
@@ -170,6 +175,21 @@ class FloorplanTimingLogger {
       `%c🔄 [Floorplan Data] Background revalidation: ${status} in ${duration.toFixed(1)}ms${updated ? ' (cache refreshed)' : ''}`,
       'color: #64748b; font-size: 10px;'
     );
+  }
+
+  recordFailure(floorplanId, error, details = {}) {
+    const current = this.currentSwitch?.floorplanId === String(floorplanId) ? this.currentSwitch : null;
+    captureDiagnostic(error, 'floorplan.load', {
+      floorplan_id: floorplanId,
+      source: current?.source,
+      data_source: current?.dataSource,
+      data_ready: Boolean(current?.dataEndTime),
+      pdf_parsed: Boolean(current?.assetDocParsedTime),
+      file_type: current?.assetType,
+      file_path: current?.assetUrl,
+      elapsed_ms: current ? Math.round(performance.now() - current.startTime) : undefined,
+      ...details,
+    });
   }
 
   /**

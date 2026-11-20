@@ -1,0 +1,19 @@
+.equipment-documents { margin-block: var(--space-4); }
+.equipment-documents-modal { margin: auto; color: var(--text-primary); font-family: var(--font-family-ui); font-size: var(--font-size-body); }
+.equipment-documents-modal::backdrop { background: var(--bg-darker); }
+.equipment-documents-body { gap: var(--space-6); }
+.equipment-documents-context { margin: 0; color: var(--text-secondary); font-size: var(--font-size-body); overflow-wrap: anywhere; }
+.equipment-documents-list { list-style: none; padding: 0; margin: 0; }
+.equipment-documents-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding-block: var(--space-4); border-bottom: thin solid var(--surface-border); }
+.equipment-documents-details { min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); overflow-wrap: anywhere; }
+.equipment-documents-details small { color: var(--text-secondary); font-size: var(--font-size-label); }
+.equipment-documents-actions { display: flex; gap: var(--space-3); flex-shrink: 0; }
+.equipment-documents-upload { display: flex; flex-direction: column; gap: var(--space-2); }
+.equipment-documents-upload label { font-size: var(--font-size-label); color: var(--text-secondary); }
+.equipment-documents-upload input { min-width: 0; width: 100%; }
+.equipment-documents-upload input::file-selector-button { font: inherit; color: var(--text-primary); background: var(--surface-elevated); border: thin solid var(--surface-border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); margin-right: var(--space-3); cursor: pointer; }
+.equipment-documents .btn, .equipment-documents-modal .btn { min-height: var(--control-height-md); }
+@media (max-width: 699px) {
+  .equipment-documents-row { align-items: stretch; flex-direction: column; }
+  .equipment-documents .btn, .equipment-documents-modal .btn, .equipment-documents-upload input { min-height: var(--control-height-lg); }
+}

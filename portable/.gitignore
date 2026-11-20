@@ -1,0 +1,10 @@
+cache/
+build/
+dist/
+test-data*/
+test-results/
+*.spec
+build-log*.txt
+build-env/
+production-export*/
+deployment/

@@ -1,0 +1,86 @@
+.room-bulk-bar,
+.room-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.room-bulk-bar {
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.room-bulk-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-height-md);
+  font-size: var(--font-size-label);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.room-bulk-checkbox input {
+  margin: 0;
+  accent-color: var(--primary-color);
+}
+
+.table-mobile-card-top > .room-bulk-checkbox {
+  flex: 0 0 var(--control-height-lg);
+  justify-content: center;
+}
+
+.room-bulk-dialog {
+  margin: auto;
+  width: calc(100% - var(--space-7));
+  max-height: calc(100dvh - var(--space-8));
+  color: var(--text-primary);
+}
+
+.room-bulk-dialog:not([open]) {
+  display: none;
+}
+
+.room-bulk-dialog::backdrop {
+  background: var(--bg-darker);
+  opacity: 0.8;
+}
+
+.room-bulk-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.room-bulk-field label {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+}
+
+.room-bulk-field textarea {
+  resize: vertical;
+}
+
+.room-bulk-dialog .modal-card-footer {
+  justify-content: flex-end;
+}
+
+.room-bulk-status {
+  margin-bottom: var(--space-3);
+}
+
+.room-bulk-actions .btn,
+.room-bulk-dialog .btn {
+  min-height: var(--control-height-md);
+}
+
+@media (max-width: 700px) {
+  .room-bulk-checkbox,
+  .room-bulk-actions .btn,
+  .room-bulk-dialog .btn {
+    min-height: var(--control-height-lg);
+  }
+}

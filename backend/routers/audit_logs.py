@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,14 @@ import schemas
 from utils import require_editor, log_action
 
 router = APIRouter(tags=["audit_logs"])
+
+async def _restore_drawings(db, floorplan_id, snapshots):
+    for snapshot in snapshots:
+        values = {key: value for key, value in snapshot.items() if key not in ('id', 'floorplan_id', 'created_at')}
+        drawing_id = snapshot.get('id')
+        if await _is_id_available(db, models.FloorplanDrawing, drawing_id):
+            values['id'] = drawing_id
+        db.add(models.FloorplanDrawing(floorplan_id=floorplan_id, **values))
 
 async def _is_id_available(db: AsyncSession, model_class, entity_id: Optional[int]) -> bool:
     if entity_id is None:
@@ -43,8 +51,9 @@ async def _sync_sequences(db: AsyncSession, tables: List[str]):
         except Exception:
             pass
 
-@router.get("/api/audit-logs", response_model=List[schemas.AuditLog])
-async def get_audit_logs(db: AsyncSession = Depends(get_db)):
+@router.get("/api/audit-logs", response_model=List[schemas.AuditLog], dependencies=[Depends(require_editor)])
+async def get_audit_logs(response: Response, db: AsyncSession = Depends(get_db)):
+    response.headers["Cache-Control"] = "no-store"
     result = await db.execute(
         select(models.AuditLog)
         .options(selectinload(models.AuditLog.user))
@@ -65,6 +74,7 @@ async def get_audit_logs(db: AsyncSession = Depends(get_db)):
             "target_name": l.target_name,
             "old_values": l.old_values,
             "new_values": l.new_values,
+            "undo_unavailable_reason": l.undo_unavailable_reason,
             "message": l.message
         }
         for l in logs
@@ -72,7 +82,11 @@ async def get_audit_logs(db: AsyncSession = Depends(get_db)):
 
 @router.post("/api/audit-logs/{log_id}/undo")
 async def undo_action(log_id: int, db: AsyncSession = Depends(get_db), current_user: models.User = Depends(require_editor)):
-    result = await db.execute(select(models.AuditLog).where(models.AuditLog.id == log_id))
+    # Acquire write-intent locks before reading undo state, so cleanup cannot
+    # remove a required file while this action is being restored.
+    if db.bind.dialect.name == 'postgresql':
+        await db.execute(text('LOCK TABLE rooms, equipment, floorplans, floorplan_drawings, audit_logs IN ROW EXCLUSIVE MODE'))
+    result = await db.execute(select(models.AuditLog).where(models.AuditLog.id == log_id).with_for_update())
     log = result.scalars().first()
     if not log:
         raise HTTPException(status_code=404, detail="Log entry not found")
@@ -91,6 +105,85 @@ async def undo_action(log_id: int, db: AsyncSession = Depends(get_db), current_u
             status_code=403,
             detail="You only have permission to undo your own audit log actions."
         )
+
+    if log.undo_unavailable_reason:
+        raise HTTPException(409, log.undo_unavailable_reason)
+
+    if log.action == 'cleanup':
+        raise HTTPException(400, 'Upload cleanup is permanent and cannot be undone.')
+
+    if log.action in ('upload_drawing', 'remove_drawing', 'update_drawing', 'align_drawing'):
+        from routers.floorplan_drawings import DrawingResponse
+        from pathlib import Path
+        from utils import UPLOAD_DIR
+        base = await db.get(models.Floorplan, log.target_id)
+        if not base:
+            raise HTTPException(409, 'Restore the floorplan before undoing a drawing change.')
+        snapshot = log.new_values if log.action == 'upload_drawing' else log.old_values
+        drawing_id = snapshot.get('drawing_id') if log.action == 'align_drawing' else snapshot.get('id')
+        item = await db.get(models.FloorplanDrawing, drawing_id)
+        if log.action == 'remove_drawing':
+            if item:
+                raise HTTPException(409, 'This drawing is already present or its ID is in use.')
+            root = Path(db.info.get('upload_root', UPLOAD_DIR)).resolve()
+            source = (root / snapshot['file_path'].removeprefix('/uploads/')).resolve()
+            if not source.is_relative_to(root / 'floorplan-drawings') or not source.is_file():
+                raise HTTPException(409, 'The drawing file is no longer available.')
+            db.add(models.FloorplanDrawing(**snapshot))
+            await db.flush()
+            await _sync_sequences(db, ['floorplan_drawings'])
+        else:
+            if not item or item.floorplan_id != base.id:
+                raise HTTPException(409, 'The drawing is no longer attached to this floorplan.')
+            current = {'drawing_id': item.id, 'placement': item.placement} if log.action == 'align_drawing' else DrawingResponse.model_validate(item).model_dump()
+            expected = log.new_values
+            if log.action in ('upload_drawing', 'update_drawing') and expected.get('placement'):
+                expected = {**expected, 'placement': {'matches': [], **expected['placement']}}
+            if current != expected:
+                raise HTTPException(409, 'The drawing changed after this event. Undo its later changes first.')
+            if log.action == 'upload_drawing':
+                await db.delete(item)
+            elif log.action == 'align_drawing':
+                item.placement = log.old_values['placement']
+            else:
+                for key, value in snapshot.items():
+                    if key not in ('id', 'floorplan_id'):
+                        setattr(item, key, value)
+        await log_action(db, 'undo', 'floorplan', base.id, base.name, old_values=log.new_values,
+                         new_values=log.old_values, message='Undid drawing change', user=current_user)
+        await db.commit()
+        return {'status': 'success', 'message': 'Drawing change undone'}
+
+    if log.action in ('upload_document', 'remove_document'):
+        snapshot = log.new_values if log.action == 'upload_document' else log.old_values
+        if not snapshot or not snapshot.get('id') or snapshot.get('equipment_id') != log.target_id:
+            raise HTTPException(409, 'This older document event has no restorable document details.')
+        item = await db.get(models.Equipment, log.target_id)
+        if not item:
+            raise HTTPException(409, 'The equipment no longer exists.')
+        doc = await db.get(models.EquipmentDocument, snapshot['id'])
+        if log.action == 'upload_document':
+            if not doc or doc.equipment_id != item.id or doc.path != snapshot['path']:
+                raise HTTPException(409, 'The uploaded document is no longer attached to this equipment.')
+            await db.delete(doc)
+        else:
+            if doc:
+                raise HTTPException(409, 'The document ID is already in use.')
+            from pathlib import Path
+            from utils import UPLOAD_DIR
+            root = Path(db.info.get('upload_root', UPLOAD_DIR)).resolve()
+            path = (root / snapshot['path'].removeprefix('/uploads/')).resolve()
+            if not path.is_relative_to(root / 'equipment-documents') or not path.is_file():
+                raise HTTPException(409, 'The document file is no longer available.')
+            db.add(models.EquipmentDocument(**{key: snapshot[key] for key in
+                ('id', 'equipment_id', 'filename', 'path', 'size_bytes')}))
+            await _sync_sequences(db, ['equipment_documents'])
+        await log_action(db, 'undo', 'equipment', item.id, item.name,
+                         old_values=log.new_values, new_values=log.old_values,
+                         message=f"Undid document {'upload' if log.action == 'upload_document' else 'removal'}: {snapshot['filename']}",
+                         user=current_user)
+        await db.commit()
+        return {'status': 'success', 'message': 'Document change undone'}
 
     if log.action == 'delete':
         if not log.old_values:
@@ -115,13 +208,15 @@ async def undo_action(log_id: int, db: AsyncSession = Depends(get_db), current_u
             floorplans_data = log.old_values.get('floorplans', [])
             for fp_data in floorplans_data:
                 orig_fp_id = fp_data.get('id')
-                fp_clean = {k: v for k, v in fp_data.items() if k not in ['id', 'created_at', 'site_id', 'rooms', 'equipment', 'tickets', 'reference_points']}
+                fp_clean = {k: v for k, v in fp_data.items() if k not in ['id', 'created_at', 'site_id', 'rooms', 'equipment', 'tickets', 'reference_points', 'drawing_layers']}
                 if await _is_id_available(db, models.Floorplan, orig_fp_id):
                     db_fp = models.Floorplan(id=orig_fp_id, site_id=db_site.id, **fp_clean)
                 else:
                     db_fp = models.Floorplan(site_id=db_site.id, **fp_clean)
                 db.add(db_fp)
                 await db.flush()
+
+                await _restore_drawings(db, db_fp.id, fp_data.get('drawing_layers', []))
 
                 for r_data in fp_data.get('rooms', []):
                     orig_r_id = r_data.get('id')
@@ -155,7 +250,7 @@ async def undo_action(log_id: int, db: AsyncSession = Depends(get_db), current_u
                     else:
                         db.add(models.ReferencePoint(floorplan_id=db_fp.id, **rp_clean))
 
-            await _sync_sequences(db, ['sites', 'floorplans', 'rooms', 'equipment', 'tickets', 'reference_points'])
+            await _sync_sequences(db, ['sites', 'floorplans', 'rooms', 'equipment', 'tickets', 'reference_points', 'floorplan_drawings'])
             await db.commit()
             await db.refresh(db_site)
             await log_action(db, "undo", "site", db_site.id, db_site.name, message=f"Restored deleted site '{db_site.name}' (ID: {db_site.id}) and all associated floorplans/equipment", user=current_user)
@@ -175,13 +270,15 @@ async def undo_action(log_id: int, db: AsyncSession = Depends(get_db), current_u
                     raise HTTPException(status_code=400, detail=f"Cannot undo: A floorplan with name '{name_to_check}' already exists at this site.")
 
             orig_fp_id = log.old_values.get('id') or log.target_id
-            fp_data = {k: v for k, v in log.old_values.items() if k not in ['id', 'created_at', 'rooms', 'equipment', 'tickets', 'reference_points']}
+            fp_data = {k: v for k, v in log.old_values.items() if k not in ['id', 'created_at', 'rooms', 'equipment', 'tickets', 'reference_points', 'drawing_layers']}
             if await _is_id_available(db, models.Floorplan, orig_fp_id):
                 db_fp = models.Floorplan(id=orig_fp_id, **fp_data)
             else:
                 db_fp = models.Floorplan(**fp_data)
             db.add(db_fp)
             await db.flush()
+
+            await _restore_drawings(db, db_fp.id, log.old_values.get('drawing_layers', []))
 
             for r_data in log.old_values.get('rooms', []):
                 orig_r_id = r_data.get('id')
@@ -215,7 +312,7 @@ async def undo_action(log_id: int, db: AsyncSession = Depends(get_db), current_u
                 else:
                     db.add(models.ReferencePoint(floorplan_id=db_fp.id, **rp_clean))
 
-            await _sync_sequences(db, ['floorplans', 'rooms', 'equipment', 'tickets', 'reference_points'])
+            await _sync_sequences(db, ['floorplans', 'rooms', 'equipment', 'tickets', 'reference_points', 'floorplan_drawings'])
             await db.commit()
             await db.refresh(db_fp)
             await log_action(db, "undo", "floorplan", db_fp.id, db_fp.name, message=f"Restored deleted floorplan '{db_fp.name}' (ID: {db_fp.id}) and all associated rooms/equipment", user=current_user)

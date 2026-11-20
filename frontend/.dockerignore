@@ -10,3 +10,4 @@ data
 *.sqlite*
 auth_state*.json
 .git
+test-results

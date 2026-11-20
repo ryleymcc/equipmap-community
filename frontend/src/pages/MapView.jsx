@@ -1,8 +1,9 @@
+import { usePhotoUpdates } from '../hooks/usePhotoUpdates';
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { MapPin, Eye, EyeOff, Loader2, AlertTriangle, X } from 'lucide-react';
+import { MapPin, Loader2, AlertTriangle, X } from 'lucide-react';
 import { computeTransform, applyTransform } from '../alignmentUtils';
 import {
   deleteRoom,
@@ -60,14 +61,17 @@ import { useMapData } from '../hooks/useMapData';
 import { useMapSearch } from '../hooks/useMapSearch';
 import { useCalibration } from '../hooks/useCalibration';
 import { useMapMode } from '../hooks/useMapMode';
+import { useFloorplanLayers } from '../hooks/useFloorplanLayers';
+import FloorplanLayers from '../components/FloorplanLayers';
 
 import { MapHeader } from '../components/MapHeader';
 import { LeftDrawer } from '../components/LeftDrawer';
 import { RightDrawer } from '../components/RightDrawer';
 import { MapCanvas } from '../components/MapCanvas';
-
-
+import PinVisibility from '../components/PinVisibility';
 import CalibrationControlPanel from '../components/CalibrationControlPanel';
+
+import './MapView.css';
 
 export default function MapView() {
   const { floorplanId } = useParams();
@@ -86,7 +90,11 @@ export default function MapView() {
   // Drawer open/close states
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false);
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
-  const [showPointNames, setShowPointNames] = useState(localStorage.getItem('showPointNames') === 'true');
+  const [pinVisibility, setPinVisibility] = useState(() => {
+    const saved = localStorage.getItem('pinVisibility');
+    if (saved === 'off' || saved === 'pins' || saved === 'names') return saved;
+    return localStorage.getItem('showPointNames') === 'true' ? 'names' : 'pins';
+  });
 
   // Multi-floor reference pin state (stored locally)
   const [multiFloorRefPin, setMultiFloorRefPin] = useState(() => {
@@ -100,12 +108,9 @@ export default function MapView() {
   const [uncalibratedWarning, setUncalibratedWarning] = useState(null);
 
 
-
-
-
   useEffect(() => {
-    localStorage.setItem('showPointNames', showPointNames);
-  }, [showPointNames]);
+    localStorage.setItem('pinVisibility', pinVisibility);
+  }, [pinVisibility]);
 
   // Forms config/error states
   const [formError, setFormError] = useState('');
@@ -119,6 +124,7 @@ export default function MapView() {
   const [isNameError, setIsNameError] = useState(false);
 
   const [pdfLoaded, setPdfLoaded] = useState(false);
+  const [assetErrorFloorplanId, setAssetErrorFloorplanId] = useState(null);
   const [switchingToFloorplan, setSwitchingToFloorplan] = useState(null);
   const [highlightedPin, setHighlightedPin] = useState(null);
   const [isPendingSync, setIsPendingSync] = useState(false);
@@ -185,6 +191,10 @@ export default function MapView() {
     loadMapData
   } = useMapData(floorplanId, activeActionType, setPdfLoaded, location.state?.preloadedFloorplan);
 
+  const drawingLayers = useFloorplanLayers(floorplan, mapContentRef, transformComponentRef);
+
+  usePhotoUpdates(setRooms, setEquipment);
+
   // 3. Search logic hook
   const {
     searchQuery,
@@ -238,6 +248,11 @@ export default function MapView() {
       setIsLeftDrawerOpen(false);
     }
   });
+
+  const setDrawingLayersOpen = drawingLayers.setOpen;
+  useEffect(() => {
+    if (isLeftDrawerOpen || isRightDrawerOpen || calibrationMode) setDrawingLayersOpen(false);
+  }, [isLeftDrawerOpen, isRightDrawerOpen, calibrationMode, setDrawingLayersOpen]);
 
   // Resolve Multi-Floor Reference Pin coordinates on current floorplan
   const activeMultiFloorRefPin = useMemo(() => {
@@ -383,7 +398,9 @@ export default function MapView() {
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState !== 'visible') return;
-      if (!dataLoaded || isRefreshing || editMode || isRelocating) return;
+      // Native camera/file pickers hide the installed app. Keep the existing
+      // photo input and edited entity stable when Android returns the file.
+      if (!dataLoaded || isRefreshing || editMode || isRelocating || editingRoom || editingEquipment || editingTicket) return;
 
       // Try ETag check before doing a full reload
       try {
@@ -409,7 +426,7 @@ export default function MapView() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [dataLoaded, isRefreshing, editMode, isRelocating, loadMapData, floorplan, floorplanId]);
+  }, [dataLoaded, isRefreshing, editMode, isRelocating, editingRoom, editingEquipment, editingTicket, loadMapData, floorplan, floorplanId]);
 
   // Deep Link Zoom Trigger
   const hasZoomedToTarget = useRef(null);
@@ -1092,10 +1109,11 @@ export default function MapView() {
   }, [isMobile, showSearchResultsList, isRelocating, editMode, setModeEdit]);
 
   const isMapReady = Boolean(dataLoaded && pdfLoaded && floorplan && floorplan.id.toString() === floorplanId && (!switchingToFloorplan || switchingToFloorplan.id.toString() === floorplanId));
+  const mapAssetFailed = assetErrorFloorplanId === floorplanId;
   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
 
   useEffect(() => {
-    if (isMapReady || (loadError && !floorplan)) {
+    if (isMapReady || mapAssetFailed || (loadError && !floorplan)) {
       if (switchingToFloorplan) {
         setSwitchingToFloorplan(null);
       }
@@ -1107,7 +1125,7 @@ export default function MapView() {
       }, 250);
       return () => clearTimeout(timer);
     }
-  }, [isMapReady, switchingToFloorplan, loadError, floorplan]);
+  }, [isMapReady, mapAssetFailed, switchingToFloorplan, loadError, floorplan]);
 
   const currentLoadingName = switchingToFloorplan?.name || floorplan?.name;
   const currentLoadingType = switchingToFloorplan?.file_type || floorplan?.file_type;
@@ -1162,16 +1180,11 @@ export default function MapView() {
         </div>
       )}
 
-      {/* Point Names Toggle Button */}
-      <button
-        className={`trigger-btn point-names-btn ${showPointNames ? 'active' : ''}`}
-        onClick={() => setShowPointNames(!showPointNames)}
-        title={showPointNames ? "Hide Point Names" : "Show Point Names"}
-      >
-        {showPointNames ? <Eye size={20} /> : <EyeOff size={20} />}
-      </button>
+      <PinVisibility value={pinVisibility} onChange={setPinVisibility} />
 
       {/* Main Map Content Loader overlay */}
+      {floorplan && floorplan.file_type !== 'glb' && !calibrationMode && <FloorplanLayers
+        model={drawingLayers} isEditor={isEditor && user?.role !== 'viewer'} onOpen={() => { setModeView(); setIsLeftDrawerOpen(false); setIsRightDrawerOpen(false); }} />}
       {showLoadingOverlay && (
         <div className="map-loading-overlay flex-column items-center gap-md">
           <Loader2 className="spinning" size={42} color="var(--primary-color)" />
@@ -1185,13 +1198,13 @@ export default function MapView() {
       )}
 
       {/* Floorplan Load Error Overlay */}
-      {loadError && !floorplan && (
+      {(mapAssetFailed || (loadError && !floorplan)) && (
         <div className="map-loading-overlay flex-column items-center justify-center p-lg">
           <div className="card glass-panel flex-column items-center text-center gap-md max-w-460 p-xl">
             <AlertTriangle size={48} color="var(--danger-color, #ef4444)" />
-            <h2 className="text-xl font-bold text-white">Unable to Load Floorplan</h2>
-            <p className="text-secondary text-sm">{loadError}</p>
-            <div className="flex items-center gap-sm mt-sm">
+            <h2 className="text-xl font-bold text-white">Unable to load floorplan</h2>
+            <p className="text-secondary text-sm">{mapAssetFailed ? 'The floorplan drawing could not be loaded. Try again.' : loadError}</p>
+            <div className="map-view-load-error-actions">
               <button
                 className="btn btn-secondary"
                 onClick={() => navigate('/')}
@@ -1200,7 +1213,7 @@ export default function MapView() {
               </button>
               <button
                 className="btn btn-primary"
-                onClick={() => loadMapData(true)}
+                onClick={() => mapAssetFailed ? window.location.reload() : loadMapData(true)}
               >
                 Retry
               </button>
@@ -1343,6 +1356,7 @@ export default function MapView() {
 
       {/* Map Interactive Canvas */}
       <MapCanvas
+        drawingLayers={drawingLayers}
         transformComponentRef={transformComponentRef}
         mapContentRef={mapContentRef}
         mapMode={mapMode}
@@ -1357,6 +1371,7 @@ export default function MapView() {
         setIsDraggingOverlay={setIsDraggingOverlay}
         overlayDragRef={overlayDragRef}
         setPdfLoaded={setPdfLoaded}
+        onAssetError={setAssetErrorFloorplanId}
         filteredRooms={filteredRooms}
         pendingRooms={pendingRooms}
         dispersedEquipment={dispersedEquipment}
@@ -1364,7 +1379,8 @@ export default function MapView() {
         multiFloorRefPin={activeMultiFloorRefPin}
         highlightedPin={highlightedPin}
         equipColor={equipColor}
-        showPointNames={showPointNames}
+        showPins={pinVisibility !== 'off'}
+        showPointNames={pinVisibility === 'names'}
         handleMapClick={handleMapClick}
         onPinRoomClick={handlePinRoomClick}
         onPinEquipClick={handlePinEquipClick}

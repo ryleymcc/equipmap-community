@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, UniqueConstraint, JSON, Boolean
+from sqlalchemy import BigInteger, Column, Integer, String, Float, ForeignKey, DateTime, UniqueConstraint, JSON, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -66,6 +66,7 @@ class AuditLog(Base):
     target_type = Column(String, nullable=False) # 'site', 'floorplan', 'room', 'equipment'
     target_id = Column(Integer)
     target_name = Column(String)
+    undo_unavailable_reason = Column(String, nullable=True)
     old_values = Column(JSON)
     new_values = Column(JSON)
     message = Column(String)
@@ -103,9 +104,38 @@ class Floorplan(Base):
     rooms = relationship("Room", back_populates="floorplan", cascade="all, delete-orphan")
     equipment = relationship("Equipment", back_populates="floorplan", cascade="all, delete-orphan")
     reference_points = relationship("ReferencePoint", back_populates="floorplan", cascade="all, delete-orphan")
+    drawing_layers = relationship("FloorplanDrawing", cascade="all, delete-orphan", passive_deletes=False)
     tickets = relationship("Ticket", back_populates="floorplan", cascade="all, delete-orphan")
 
-class Room(Base):
+class FloorplanDrawing(Base):
+    __tablename__ = "floorplan_drawings"
+
+    id = Column(Integer, primary_key=True)
+    floorplan_id = Column(Integer, ForeignKey("floorplans.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    discipline = Column(String, nullable=False)
+    sheet_number = Column(String, nullable=False, default="")
+    project = Column(String, nullable=False, default="")
+    drawing_date = Column(String, nullable=False, default="")
+    revision = Column(String, nullable=False, default="")
+    filename = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    file_type = Column(String, nullable=False)
+    size_bytes = Column(BigInteger, nullable=False)
+    page_number = Column(Integer, nullable=False, default=1)
+    placement = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class PhotoMixin:
+    @property
+    def photo_thumbnail_path(self):
+        path = self.photo_path
+        if path and path.startswith('/uploads/entity-photos/') and path.endswith('.preview.webp'):
+            return path.replace('.preview.webp', '.thumb.webp')
+        return None
+
+
+class Room(PhotoMixin, Base):
     __tablename__ = "rooms"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -115,9 +145,11 @@ class Room(Base):
     x_coordinate = Column(Float)
     y_coordinate = Column(Float)
 
+    photo_path = Column(String, nullable=True)
+
     floorplan = relationship("Floorplan", back_populates="rooms")
 
-class Equipment(Base):
+class Equipment(PhotoMixin, Base):
     __tablename__ = "equipment"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -131,6 +163,16 @@ class Equipment(Base):
     tools_required = Column(String)
 
     floorplan = relationship("Floorplan", back_populates="equipment")
+
+class EquipmentDocument(Base):
+    __tablename__ = "equipment_documents"
+
+    id = Column(Integer, primary_key=True)
+    equipment_id = Column(Integer, ForeignKey("equipment.id", ondelete="CASCADE"), nullable=False, index=True)
+    filename = Column(String, nullable=False)
+    path = Column(String, nullable=False)
+    size_bytes = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Ticket(Base):
     __tablename__ = "tickets"
@@ -162,3 +204,19 @@ class ReferencePoint(Base):
     )
 
     floorplan = relationship("Floorplan", back_populates="reference_points")
+
+
+class UploadAsset(Base):
+    __tablename__ = 'upload_assets'
+    path = Column(String, primary_key=True)
+    size_bytes = Column(BigInteger, nullable=False)
+    modified = Column(Float, nullable=False)
+    fingerprint = Column(String, nullable=False)
+
+
+class UploadReference(Base):
+    __tablename__ = 'upload_references'
+    source_type = Column(String, primary_key=True)
+    source_id = Column(Integer, primary_key=True)
+    path = Column(String, primary_key=True, index=True)
+    category = Column(String, nullable=False, index=True)

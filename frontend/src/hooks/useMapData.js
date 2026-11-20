@@ -89,6 +89,7 @@ export function useMapData(floorplanId, activeActionType, setPdfLoaded, preloade
         return dbLastName;
       });
     } catch (error) {
+      floorplanLogger.recordFailure(floorplanId, error, { stage: 'data.fetch' });
       console.error("Failed to load map data:", error);
       const msg = error.response?.status === 404
         ? "Floorplan not found"

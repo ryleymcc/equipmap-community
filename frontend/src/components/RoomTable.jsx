@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import EntityPhoto from './EntityPhoto';
+import { useState, useMemo, useRef } from 'react';
 import {
   DoorOpen, Map as MapIcon, Building,
   Check, X, Pencil, ExternalLink, Trash2,
@@ -7,6 +8,8 @@ import {
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import RoomCard from './RoomCard';
+import RoomBulkEditDialog from './RoomBulkEditDialog';
+import './RoomTable.css';
 
 export default function RoomTable({
   allRooms,
@@ -20,6 +23,7 @@ export default function RoomTable({
   isEditor,
   startEditRoom,
   saveEditRoom,
+  saveBulkRooms,
   handleDeleteRoom,
   goToMap,
   goToPlaceRoom,
@@ -31,10 +35,40 @@ export default function RoomTable({
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [selectedRoomIds, setSelectedRoomIds] = useState(() => new Set());
+  const [bulkRoomIds, setBulkRoomIds] = useState(null);
+  const [bulkStatus, setBulkStatus] = useState('');
+  const selectAllRef = useRef(null);
+  const bulkEditRef = useRef(null);
 
-  const [previousCount, setPreviousCount] = useState(filteredRooms.length);
-  if (previousCount !== filteredRooms.length) {
-    setPreviousCount(filteredRooms.length);
+  const selectedRooms = filteredRooms.filter(room => selectedRoomIds.has(room.id));
+  const selectedCount = selectedRooms.length;
+  const allSelected = selectedCount > 0 && selectedCount === filteredRooms.length;
+  const toggleRoomSelection = (id, checked) => {
+    const next = new Set(selectedRooms.map(room => room.id));
+    if (checked) next.add(id);
+    else next.delete(id);
+    setSelectedRoomIds(next);
+    setBulkStatus('');
+  };
+  const roomCheckbox = room => (
+    <label className="room-bulk-checkbox">
+      <input type="checkbox" aria-label={`Select room ${room.name}`}
+        checked={selectedRoomIds.has(room.id)}
+        onChange={event => toggleRoomSelection(room.id, event.target.checked)} />
+    </label>
+  );
+  const applyBulkEdit = async description => {
+    await saveBulkRooms(bulkRoomIds, description);
+    setBulkStatus(bulkRoomIds.length === 1 ? 'Updated 1 room.' : `Updated ${bulkRoomIds.length} rooms.`);
+    setSelectedRoomIds(new Set());
+    setBulkRoomIds(null);
+    requestAnimationFrame(() => (selectAllRef.current ?? document.getElementById('rooms-table-heading'))?.focus());
+  };
+
+  const [previousResultCount, setPreviousResultCount] = useState(filteredRooms.length);
+  if (previousResultCount !== filteredRooms.length) {
+    setPreviousResultCount(filteredRooms.length);
     setCurrentPage(1);
   }
 
@@ -64,7 +98,7 @@ export default function RoomTable({
       <div className="flex-between items-center flex-wrap gap-md mb-xl">
         <div className="items-center gap-md">
           <DoorOpen size={24} color="#3b82f6" />
-          <h2 className="text-lg font-semibold m-0 items-center gap-sm">
+          <h2 id="rooms-table-heading" tabIndex={-1} className="text-lg font-semibold m-0 items-center gap-sm">
             Rooms
             {isLoading && allRooms.length === 0 ? (
               <span className="skeleton" style={{ width: '48px', height: '22px', borderRadius: '6px' }} />
@@ -120,12 +154,44 @@ export default function RoomTable({
         )}
       </div>
 
+      {isEditor && filteredRooms.length > 0 && (
+        <div className="room-bulk-bar glass-panel">
+          <label className="room-bulk-checkbox">
+            <input ref={element => {
+              selectAllRef.current = element;
+              if (element) element.indeterminate = selectedCount > 0 && !allSelected;
+            }} type="checkbox" checked={allSelected} onChange={() => {
+              setSelectedRoomIds(new Set(allSelected ? [] : filteredRooms.map(room => room.id)));
+              setBulkStatus('');
+            }} />
+            Select all filtered rooms
+          </label>
+          {selectedCount > 0 && (
+            <div className="room-bulk-actions">
+              <span>{selectedCount.toLocaleString()} selected</span>
+              <button type="button" className="btn btn-secondary" onClick={() => {
+                setSelectedRoomIds(new Set());
+                selectAllRef.current?.focus();
+              }}>Clear selection</button>
+              <button type="button" className="btn btn-primary" ref={bulkEditRef}
+                onClick={() => setBulkRoomIds(selectedRooms.map(room => room.id))}>Bulk edit</button>
+            </div>
+          )}
+        </div>
+      )}
+      <div role="status" className={bulkStatus ? 'room-bulk-status text-success' : undefined}>{bulkStatus}</div>
+      {isEditor && bulkRoomIds && (
+        <RoomBulkEditDialog count={bulkRoomIds.length} onSave={applyBulkEdit}
+          onClose={() => setBulkRoomIds(null)} returnFocus={bulkEditRef} />
+      )}
+
       {/* Desktop Table View */}
       <div className="table-desktop-view">
         <div className="list-table-wrapper">
           <table className="list-table">
             <thead>
               <tr>
+                {isEditor && <th className="th-checkbox" scope="col" aria-label="Select room" />}
                 <th
                   className="sortable-header pointer"
                   onClick={() => toggleRoomSort && toggleRoomSort('name')}
@@ -166,6 +232,7 @@ export default function RoomTable({
               {isLoading && allRooms.length === 0 ? (
                 [1, 2, 3, 4, 5, 6, 7, 8].map((rowKey) => (
                   <tr key={rowKey}>
+                    {isEditor && <td />}
                     <td>
                       <div className="skeleton skeleton-text" style={{ width: `${50 + (rowKey % 4) * 12}%`, height: '16px' }} />
                     </td>
@@ -191,7 +258,7 @@ export default function RoomTable({
                 ))
               ) : filteredRooms.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={isEditor ? 7 : 6}>
                     <div className="list-empty p-2xl text-center">
                       <DoorOpen size={48} className="list-empty-icon opacity-40 m-auto mb-sm" />
                       <p className="text-muted m-0">No rooms match the current filter</p>
@@ -205,6 +272,7 @@ export default function RoomTable({
 
                   return (
                     <tr key={room.id} className={`${isEditing ? 'editing-row' : ''} ${isUnlocated ? 'unlocated-row' : ''}`}>
+                      {isEditor && <td>{roomCheckbox(room)}</td>}
                       <td className="font-medium">
                         {isEditing ? (
                           <input
@@ -213,7 +281,7 @@ export default function RoomTable({
                             onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                             autoFocus
                           />
-                        ) : room.name}
+                        ) : <><EntityPhoto item={room} kind="rooms" compact canEdit={isEditor} />{room.name}</>}
                       </td>
                       <td>
                         {isEditing ? (
@@ -325,6 +393,7 @@ export default function RoomTable({
             <RoomCard
               key={room.id}
               room={room}
+              selectionControl={isEditor ? roomCheckbox(room) : null}
               isEditing={editingRoomId === room.id}
               editForm={editForm}
               setEditForm={setEditForm}

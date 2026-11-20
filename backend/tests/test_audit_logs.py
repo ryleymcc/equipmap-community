@@ -20,14 +20,8 @@ async def test_audit_logs(client: AsyncClient, admin_token: str):
     assert site_log["username"] == "admin_test"
     assert site_log["user_id"] is not None
 
-    etag = response.headers.get("etag")
-    assert etag is not None
-
-    # 304 match
-    headers_with_etag = {**headers, "If-None-Match": etag}
-    response_304 = await client.get("/api/audit-logs", headers=headers_with_etag)
-    assert response_304.status_code == 304
-    assert response_304.text == ""
+    assert response.headers["cache-control"] == "no-store"
+    assert "etag" not in response.headers
 
     # 3. Undo (if applicable)
     log_id = site_log["id"]
@@ -49,7 +43,7 @@ async def test_undo_deleted_site_with_cascading_children(client: AsyncClient, ad
         files={"file": ("level1.svg", b"<svg><rect width='100' height='100'/></svg>", "image/svg+xml")},
         headers=headers
     )
-    assert fp_res.status_code == 200
+    assert fp_res.status_code == 200, fp_res.text
     fp_id = fp_res.json()["id"]
 
     room_res = await client.post("/api/rooms", json={"floorplan_id": fp_id, "name": "Room 101", "description": "ICU", "x_coordinate": 15.5, "y_coordinate": 25.5}, headers=headers)

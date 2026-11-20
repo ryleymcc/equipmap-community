@@ -1,3 +1,4 @@
+import EntityPhoto from './EntityPhoto';
 import {
   DoorOpen, Map as MapIcon, Building,
   Check, X, Pencil, ExternalLink, Trash2,
@@ -6,6 +7,7 @@ import {
 
 export default function RoomCard({
   room,
+  selectionControl,
   isEditing = false,
   editForm,
   setEditForm,
@@ -25,6 +27,7 @@ export default function RoomCard({
     <div className={`table-mobile-card glass-panel ${isEditing ? 'editing-card' : ''}`}>
       {/* 1. Header: Name & Status / Edit Input */}
       <div className="table-mobile-card-top">
+        {selectionControl}
         {isEditing ? (
           <div className="flex-1 mr-sm">
             <input
@@ -40,6 +43,7 @@ export default function RoomCard({
             <div className="avatar-circle-xs bg-primary-subtle text-primary">
               <DoorOpen size={13} color="#3b82f6" />
             </div>
+            <EntityPhoto item={room} kind="rooms" compact canEdit={isEditor} />
             <span className="table-mobile-card-title text-truncate">
               {room.name}
             </span>

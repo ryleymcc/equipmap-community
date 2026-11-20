@@ -113,6 +113,7 @@ function App() {
             <DeferredPwaUpdate />
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/floorplans" element={<Dashboard />} />
               <Route path="/rooms" element={<Dashboard />} />
               <Route path="/equipment" element={<Dashboard />} />
               <Route path="/issues" element={<Dashboard />} />
@@ -120,6 +121,7 @@ function App() {
 
               <Route path="/map/:floorplanId" element={<MapView />} />
               <Route path="/audit-log" element={<AuditHistory />} />
+              <Route path="/audit-log/data" element={<AuditHistory />} />
               <Route path="/users" element={<UserManagement />} />
               <Route path="/login" element={<Login />} />
               <Route path="/connect/chatgpt" element={<ChatGPTConnect />} />

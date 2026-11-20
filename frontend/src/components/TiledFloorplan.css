@@ -1,0 +1,23 @@
+.floorplan-tiles {
+  position: relative;
+  width: 100%;
+}
+.floorplan-tiles canvas {
+  position: absolute;
+  pointer-events: none;
+}
+.floorplan-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.floorplan-tiles .floorplan-detail {
+  visibility: hidden;
+}
+.floorplan-tiles[data-detail="ready"] .floorplan-detail {
+  visibility: visible;
+}
+.floorplan-tiles[data-detail="ready"] .floorplan-preview {
+  visibility: hidden;
+}

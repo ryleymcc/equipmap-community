@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import { X, MapPin, Edit3, Building, UploadCloud, Layers, Plus, Check, Upload, RefreshCw } from 'lucide-react';
 import { COLORS } from '../mapConstants';
 import FloorplanRescaleModal from './FloorplanRescaleModal';
@@ -77,20 +77,19 @@ export default function DashboardModals({
   const [addToolsRequired, setAddToolsRequired] = useState('');
   const [addColor, setAddColor] = useState(COLORS[0]);
 
-  useEffect(() => {
-    if (!isReplaceFileModalOpen) {
-      setSelectedReplaceFile(null);
-    }
-  }, [isReplaceFileModalOpen]);
+  const addSelectionKey = isAddSelectionModalOpen ? addSelectionType : null;
+  const [previousAddSelection, setPreviousAddSelection] = useState(addSelectionKey);
+  if (previousAddSelection !== addSelectionKey) {
+    setPreviousAddSelection(addSelectionKey);
+    setAddName('');
+    setAddDescription('');
+    setAddToolsRequired('');
+    setAddColor(COLORS[0]);
+  }
 
-  useEffect(() => {
-    if (isAddSelectionModalOpen) {
-      setAddName('');
-      setAddDescription('');
-      setAddToolsRequired('');
-      setAddColor(COLORS[0]);
-    }
-  }, [isAddSelectionModalOpen, addSelectionType]);
+  if (!isReplaceFileModalOpen && selectedReplaceFile) {
+    setSelectedReplaceFile(null);
+  }
 
   return (
     <>
@@ -159,8 +158,7 @@ export default function DashboardModals({
                   />
                   <span>Update Tools Required</span>
                 </label>
-                <input
-                  type="text"
+                <textarea aria-label="Tools required" rows={3}
                   className="input-field mt-2xs"
                   value={bulkEditForm.tools_required}
                   onChange={e => setBulkEditForm(prev => ({ ...prev, tools_required: e.target.value, tools_requiredOverridden: true }))}
@@ -387,7 +385,7 @@ export default function DashboardModals({
                 <button
                   type="submit"
                   className="btn btn-primary btn-sm gap-xs"
-                  disabled={isReplacingFile || (!selectedReplaceFile && !replaceFileRef.current?.files?.[0])}
+                  disabled={isReplacingFile || !selectedReplaceFile}
                 >
                   {isReplacingFile && <RefreshCw size={14} className="spinning" />}
                   <span>{isReplacingFile ? 'Replacing...' : 'Replace File'}</span>
@@ -690,8 +688,7 @@ export default function DashboardModals({
 
               <div className="input-group">
                 <label>Description (optional)</label>
-                <input
-                  type="text"
+                <textarea aria-label="Description" rows={3}
                   className="input-field"
                   placeholder="e.g. Storage room, Main cooling pump"
                   value={addDescription}
@@ -703,8 +700,7 @@ export default function DashboardModals({
                 <>
                   <div className="input-group">
                     <label>Tools Required (optional)</label>
-                    <input
-                      type="text"
+                    <textarea aria-label="Tools required" rows={3}
                       className="input-field"
                       placeholder="e.g. Screwdriver, Multimeter"
                       value={addToolsRequired}

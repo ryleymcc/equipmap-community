@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, Field
+from typing import Annotated, Literal, Optional, List
 from datetime import date, datetime
 
 class UserBase(BaseModel):
@@ -77,10 +77,15 @@ class Token(BaseModel):
     can_close_work_orders: bool = True
     can_undo_all_audit_logs: bool = False
 
-class TokenData(BaseModel):
-    username: Optional[str] = None
-    token_version: Optional[int] = 1
-    jti: Optional[str] = None
+class AccessTokenClaims(BaseModel):
+    sub: Annotated[str, Field(strict=True, pattern=r"^[1-9][0-9]{0,9}$")]
+    exp: Annotated[int, Field(strict=True, gt=0)]
+    iat: Annotated[int, Field(strict=True, gt=0)]
+    jti: Annotated[str, Field(strict=True, min_length=1, max_length=128)]
+    token_version: Annotated[int, Field(strict=True, ge=1, le=2147483647)]
+    type: Literal["access"]
+    iss: Annotated[str, Field(strict=True, min_length=1)]
+    aud: Annotated[str, Field(strict=True, min_length=1)]
 
 class TokenRefreshRequest(BaseModel):
     refresh_token: Optional[str] = None
@@ -124,6 +129,8 @@ class RoomCreate(RoomBase):
     floorplan_id: int
 
 class Room(RoomBase):
+    photo_path: Optional[str] = None
+    photo_thumbnail_path: Optional[str] = None
     id: int
     floorplan_id: int
 
@@ -143,6 +150,8 @@ class EquipmentCreate(EquipmentBase):
     floorplan_id: int
 
 class Equipment(EquipmentBase):
+    photo_path: Optional[str] = None
+    photo_thumbnail_path: Optional[str] = None
     id: int
     floorplan_id: int
 
@@ -155,6 +164,10 @@ class RoomUpdate(BaseModel):
     x_coordinate: Optional[float] = None
     y_coordinate: Optional[float] = None
     floorplan_id: Optional[int] = None
+
+class RoomBulkUpdate(BaseModel):
+    ids: List[int] = Field(min_length=1)
+    description: str = Field(pattern=r"^[^*?]*$")
 
 class ReferencePointBase(BaseModel):
     label: str
@@ -281,6 +294,7 @@ class Floorplan(FloorplanBase):
         from_attributes = True
 
 class AuditLog(BaseModel):
+    undo_unavailable_reason: Optional[str] = None
     id: int
     timestamp: datetime
     user_id: Optional[int] = None

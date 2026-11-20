@@ -1,5 +1,8 @@
 import axios from 'axios';
 import { trackResponseTime } from './metrics.js';
+import { refreshSession } from './refreshSession.js';
+import { captureApiFailure } from './diagnostics.js';
+import { isServerReachable } from './connectivity';
 
 // Get the base API URL from environment or current origin
 const DEFAULT_URL = typeof window !== 'undefined' ? window.location.origin : '';
@@ -29,6 +32,7 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
+    captureApiFailure(error);
     if (error.config?.metadata?.startTime) {
       const duration = performance.now() - error.config.metadata.startTime;
       const endpoint = error.config.url?.split('?')[0] || 'unknown';
@@ -37,29 +41,15 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     // Don't try to refresh if we are offline, if it's already a retry, or if it's an auth endpoint itself
     const isAuthEndpoint = originalRequest?.url?.includes('/api/token') || originalRequest?.url?.includes('/api/refresh-token') || originalRequest?.url?.includes('/api/auth/logout');
-    if (error.response?.status === 401 && !originalRequest._retry && localStorage.getItem('token') && navigator.onLine && !isAuthEndpoint) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && localStorage.getItem('token') && isServerReachable() && !isAuthEndpoint) {
       originalRequest._retry = true;
       try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        let res;
-        if (refreshToken) {
-          // Preferred: use refresh token rotation
-          res = await axios.post(`${BASE_URL}/api/refresh-token`, { refresh_token: refreshToken });
-        } else {
-          // Fallback: use existing access token (backwards compatibility)
-          res = await axios.post(`${BASE_URL}/api/refresh-token`, {}, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-          });
-        }
-        const { access_token, refresh_token: new_refresh_token } = res.data;
-        localStorage.setItem('token', access_token);
-        if (new_refresh_token) {
-          localStorage.setItem('refresh_token', new_refresh_token);
-        }
+        const { access_token } = await refreshSession(BASE_URL);
         api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
         originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
         return api(originalRequest);
       } catch (refreshError) {
+        if (refreshError.sessionChanged) return Promise.reject(refreshError);
         localStorage.removeItem('token');
         localStorage.removeItem('refresh_token');
         window.location.href = '/login';
@@ -113,6 +103,7 @@ export const batchImportEquipment = (data) => api.post('/api/equipment/batch', d
 export const getAllEquipment = (config) => api.get('/api/equipment', config);
 export const getAllRooms = (config) => api.get('/api/rooms', config);
 export const updateRoom = (id, data) => api.put(`/api/rooms/${id}`, data);
+export const bulkUpdateRooms = (data) => api.put('/api/rooms/bulk', data);
 
 export const searchAll = (query, config) => api.get(`/api/search?q=${encodeURIComponent(query)}`, config);
 

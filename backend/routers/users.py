@@ -13,7 +13,7 @@ import schemas
 from utils import (
     verify_password, get_password_hash, create_access_token,
     create_refresh_token, rotate_refresh_token, revoke_user_sessions,
-    revoke_access_token, revoke_refresh_token_string, get_current_user,
+    revoke_access_token, revoke_refresh_token_string,
     require_user, require_admin, ACCESS_TOKEN_EXPIRE_MINUTES, oauth2_scheme
 )
 from limiter import limiter, RATE_LIMIT_LOGIN
@@ -47,7 +47,7 @@ async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequ
     token_version = user.token_version or 1
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires, token_version=token_version
+        user_id=user.id, expires_delta=access_token_expires, token_version=token_version
     )
 
     client_ip = request.client.host if request.client else None
@@ -92,47 +92,6 @@ async def refresh_token(
     raw_refresh = refresh_req.refresh_token if (refresh_req and refresh_req.refresh_token) else None
 
     if not raw_refresh:
-        # Fallback: check if an access token was provided in Authorization header
-        auth_header = request.headers.get("authorization")
-        if auth_header and auth_header.lower().startswith("bearer "):
-            token = auth_header.split(" ")[1]
-            try:
-                current_user = await get_current_user(token=token, db=db)
-                if current_user:
-                    token_version = current_user.token_version or 1
-                    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-                    access_token = create_access_token(
-                        data={"sub": current_user.username},
-                        expires_delta=access_token_expires,
-                        token_version=token_version
-                    )
-                    new_refresh_token = await create_refresh_token(
-                        user_id=current_user.id,
-                        token_version=token_version,
-                        db=db,
-                        device_info=device_info,
-                        ip_address=client_ip
-                    )
-                    is_adm = current_user.role == "admin"
-                    return {
-                        "access_token": access_token,
-                        "refresh_token": new_refresh_token,
-                        "token_type": "bearer",
-                        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-                        "username": current_user.username,
-                        "full_name": current_user.full_name,
-                        "email": current_user.email,
-                        "role": current_user.role,
-                        "can_triage": bool(current_user.can_triage or is_adm),
-                        "can_assign": bool(current_user.can_assign or is_adm),
-                        "can_create_pm": bool(current_user.can_create_pm or is_adm),
-                        "can_create_work_orders": bool(current_user.can_create_work_orders if not is_adm else True),
-                        "can_manage_items": bool(current_user.can_manage_items or is_adm or current_user.role == "editor"),
-                        "can_close_work_orders": bool(current_user.can_close_work_orders if not is_adm else True),
-                        "can_undo_all_audit_logs": bool(current_user.can_undo_all_audit_logs or is_adm)
-                    }
-            except Exception:
-                pass
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token is required",

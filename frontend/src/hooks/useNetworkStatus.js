@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
+import { isServerReachable } from '../connectivity';
 
 export function useNetworkStatus() {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(isServerReachable);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOffline = () => setIsOnline(isServerReachable());
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);

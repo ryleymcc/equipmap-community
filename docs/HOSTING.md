@@ -56,6 +56,10 @@ https://caddyserver.com/docs/automatic-https
 
 For a localhost pilot leave the example address and loopback bindings.
 HTTP localhost is for local use; remote PWA/service-worker behavior needs HTTPS.
+Compose uses an internal Redis service for rate limiting. If the Compose
+subnet overlaps a network on your host, set EQUIPMAP_SUBNET to a free subnet,
+EQUIPMAP_DYNAMIC_IP_RANGE to a range inside it, and CADDY_PROXY_IP to an
+address in the subnet outside the dynamic range.
 
 ## 3. Start and verify
 
@@ -126,7 +130,7 @@ Restore into an isolated, empty deployment using the saved secrets/revision:
 docker compose up -d db
 # Wait for db to report healthy before the next command.
 docker compose cp backups/database.dump db:/tmp/database.dump
-docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-ryleymcc --exit-on-error /tmp/database.dump'
+docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error /tmp/database.dump'
 tar -xzf backups/uploads.tar.gz
 docker compose run --rm --no-deps -v "$PWD/backups:/backup" --entrypoint sh backend -c 'tar -xzf /backup/backend-data.tar.gz -C /app/data'
 docker compose up -d --build
@@ -147,7 +151,7 @@ docker compose logs --tail=100 backend
 ```
 
 Recheck login, real data, PDFs, and direct links. PWA clients may need a refresh
-to obtain the new shell. Schema updates currently run at startup; there is no
+to obtain the new shell. Older access tokens may require a refresh or a fresh sign-in. Schema updates run at startup; there is no
 formal reversible migration system. A rollback may require both the prior source
 revision and its matching database/uploads backup. Rebuilding the old image alone
 does not undo schema changes.
@@ -168,6 +172,6 @@ Never use docker compose down -v on a deployment you want to retain.
 ## Sensitive facilities
 
 See SECURITY.md before hosting real floorplans. Upload URLs currently lack
-application authentication, and CORS is broad. Restrict the whole deployment
+application authentication. Cross-origin API access is opt-in via CORS_ALLOWED_ORIGINS. Restrict the whole deployment
 behind a VPN/access gateway when facility records are sensitive. This hosting
 guide does not claim the application is safe for unrestricted public data access.

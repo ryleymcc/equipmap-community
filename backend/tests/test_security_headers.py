@@ -1,5 +1,22 @@
 import pytest
 from httpx import AsyncClient
+from httpx import ASGITransport
+from main import CachedStaticFiles
+
+
+@pytest.mark.asyncio
+async def test_legacy_svg_is_sandboxed_on_reads_and_revalidation(tmp_path):
+    (tmp_path / "legacy.svg").write_text("<svg/>")
+    static = CachedStaticFiles(directory=tmp_path)
+    async with AsyncClient(transport=ASGITransport(app=static), base_url="http://test") as client:
+        initial = await client.get("/legacy.svg")
+        assert initial.status_code == 200
+        cached = await client.get("/legacy.svg", headers={"If-None-Match": initial.headers["etag"]})
+        assert cached.status_code == 304
+    for response in (initial, cached):
+        policy = response.headers["Content-Security-Policy"].split("; ")
+        assert "sandbox" in policy
+        assert "default-src 'none'" in policy
 
 @pytest.mark.asyncio
 async def test_security_headers_on_health_endpoint(client: AsyncClient):

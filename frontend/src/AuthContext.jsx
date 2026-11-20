@@ -5,26 +5,25 @@ import { clearAllClientCaches } from './cacheUtils';
 
 const AuthContext = createContext(null);
 
+export function canManageEquipMapItems(user) {
+  return Boolean(user && (
+    user.role === 'admin' || user.role === 'editor' ||
+    (user.role !== 'viewer' && user.can_manage_items)
+  ));
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const logout = useCallback(async () => {
-    // Call server-side logout to revoke tokens
-    try {
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (refreshToken) {
-        await api.post('/api/auth/logout', { refresh_token: refreshToken });
-      }
-    } catch (err) {
-      // Proceed with local logout even if server-side fails
-      console.warn('Server-side logout failed:', err);
-    }
-    clearAllClientCaches();
-    localStorage.removeItem('token');
-    localStorage.removeItem('refresh_token');
+    const refreshToken = localStorage.getItem('refresh_token');
+    const pending = [];
+    if (refreshToken) pending.push(api.post('/api/auth/logout', { refresh_token: refreshToken }));
+    pending.push(clearAllClientCaches());
     delete api.defaults.headers.common['Authorization'];
     setUser(null);
+    await Promise.allSettled(pending);
   }, []);
 
   const login = useCallback(async (username, password) => {
@@ -57,6 +56,9 @@ export const AuthProvider = ({ children }) => {
       setUser(res.data);
     } catch (error) {
       console.warn('Failed to fetch user with stored token:', error);
+      // A disconnected device must retain its session and offline entity/photo caches.
+      // Only an explicit authentication rejection invalidates the saved session.
+      if (!error.response || ![401, 403].includes(error.response.status)) return;
       await logout();
       if (import.meta.env.VITE_DEMO_MODE === 'true') {
         try {
@@ -93,7 +95,7 @@ export const AuthProvider = ({ children }) => {
 
   const isAdmin = Boolean(user && (user.role === 'admin' || user.is_admin));
   const isTechnician = Boolean(isAdmin || (user && (user.role === 'technician' || user.role === 'editor')));
-  const canManageItems = Boolean(isAdmin || (user && (user.can_manage_items !== false || user.role === 'editor')));
+  const canManageItems = canManageEquipMapItems(user);
   const isEditor = canManageItems;
   const canUndoAllAuditLogs = Boolean(isAdmin || (user && user.can_undo_all_audit_logs));
 

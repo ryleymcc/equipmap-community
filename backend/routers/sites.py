@@ -71,14 +71,20 @@ async def delete_site(site_id: int, db: AsyncSession = Depends(get_db), current_
                 "id": fp.id,
                 "name": fp.name,
                 "file_path": fp.file_path,
+                "previous_file_path": fp.previous_file_path,
                 "file_type": fp.file_type,
                 "pin_size": fp.pin_size,
                 "sort_order": fp.sort_order,
+                "drawing_layers": [
+                    {column.name: getattr(drawing, column.name) for column in models.FloorplanDrawing.__table__.columns if column.name != 'created_at'}
+                    for drawing in (await db.execute(select(models.FloorplanDrawing).where(models.FloorplanDrawing.floorplan_id == fp.id))).scalars()
+                ],
                 "rooms": [
                     {
                         "id": r.id,
                         "name": r.name,
                         "description": r.description,
+                        "photo_path": r.photo_path,
                         "x_coordinate": r.x_coordinate,
                         "y_coordinate": r.y_coordinate,
                     }

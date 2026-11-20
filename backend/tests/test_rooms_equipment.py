@@ -11,6 +11,7 @@ async def test_fp_id(client: AsyncClient, admin_token: str):
     files = {"file": ("test.svg", b"<svg></svg>", "image/svg+xml")}
     data = {"site_id": site_id, "name": "Room/Equip FP", "file_type": "svg"}
     f_resp = await client.post("/api/floorplans", data=data, files=files, headers=headers)
+    assert f_resp.status_code == 200, f_resp.text
     return f_resp.json()["id"]
 
 @pytest.mark.asyncio

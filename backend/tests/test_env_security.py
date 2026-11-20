@@ -11,6 +11,28 @@ if backend_path not in sys.path:
 import config
 
 
+@pytest.mark.parametrize('password', ['x', 'admin', 'password', '123456', 'changeme', ' a '])
+def test_portable_accepts_chosen_admin_password_without_length_or_default_filter(monkeypatch, password):
+    monkeypatch.setenv('EQUIPMAP_PORTABLE', '1')
+    monkeypatch.setenv('INITIAL_ADMIN_PASSWORD', password)
+    monkeypatch.setattr(config, 'IS_PRODUCTION', True)
+    assert config.get_initial_admin_password() == password
+
+
+def test_portable_still_requires_a_password(monkeypatch):
+    monkeypatch.setenv('EQUIPMAP_PORTABLE', '1')
+    monkeypatch.setenv('INITIAL_ADMIN_PASSWORD', '')
+    assert config.get_initial_admin_password() is None
+
+
+@pytest.mark.parametrize('password', ['', 'admin', 'password', '123456', 'changeme'])
+def test_hosted_production_keeps_admin_bootstrap_checks(monkeypatch, password):
+    monkeypatch.delenv('EQUIPMAP_PORTABLE', raising=False)
+    monkeypatch.setenv('INITIAL_ADMIN_PASSWORD', password)
+    monkeypatch.setattr(config, 'IS_PRODUCTION', True)
+    assert config.get_initial_admin_password() is None
+
+
 def test_production_fails_when_secret_key_missing(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.delenv("SECRET_KEY", raising=False)
@@ -147,3 +169,10 @@ if __name__ == "__main__":
             mp.undo()
     print("\nAll 9 environment security checks passed successfully!")
 
+
+@pytest.mark.parametrize("secret", [config.DEV_FALLBACK_SECRET_KEY, "your-secure-random-secret-key-at-least-32-chars-long"])
+def test_production_rejects_long_known_example_secrets(monkeypatch, secret):
+    monkeypatch.setattr(config, "IS_PRODUCTION", True)
+    monkeypatch.setenv("SECRET_KEY", secret)
+    with pytest.raises(RuntimeError, match="Production SECRET_KEY is insecure"):
+        config.get_secret_key()

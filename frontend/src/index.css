@@ -1,5 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 @import './utilities.css';
+
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/Outfit.ttf') format('truetype');
+}
 
 :root {
   --bg-color: #0b1329;
